@@ -1,0 +1,24 @@
+# Dependencias del proyecto Data Health MCD Unison.
+#
+# Instalación local:
+#   make install
+#
+# Instalación con Docker:
+#   docker compose build
+#
+# Notas:
+# - No se utiliza GeoPandas ni Shapely.
+# - Los mapas se construirán con Plotly a partir de GeoJSON.
+# - PyArrow permite leer y escribir archivos Parquet.
+
+pandas==2.2.3
+numpy==2.1.3
+pyarrow==18.1.0
+streamlit==1.41.1
+plotly==5.24.1
+requests==2.32.3
+PyYAML==6.0.2
+
+# Desarrollo y pruebas
+pytest==8.3.4
+ruff==0.8.4

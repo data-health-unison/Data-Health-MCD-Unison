@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: data-health-mcd-unison:dev
+    container_name: data-health-app
+
+    ports:
+      - "8501:8501"
+
+    volumes:
+      - .:/project
+
+    working_dir: /project
+
+    environment:
+      PYTHONPATH: /project/src
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    command:
+      - streamlit
+      - run
+      - app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
