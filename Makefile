@@ -2,14 +2,15 @@ PYTHON ?= $(shell which python3.12 2>/dev/null || which python3)
 VENV   := .venv
 PY     := $(VENV)/bin/python
 
-.PHONY: help install venv data app test lint fmt clean clean-data \
-        docker-build docker-app docker-data docker-test docker-lint \
+.PHONY: help install venv data download app test lint fmt clean clean-data \
+        docker-build docker-app docker-data docker-download docker-test docker-lint \
         docker-shell docker-down
 
 help:
 	@echo "Comandos locales:"
 	@echo "  make install       Crea el entorno e instala dependencias"
 	@echo "  make data          Ejecuta el pipeline"
+	@echo "  make download      Descarga una fuente (FUENTE=SALUD-001)"
 	@echo "  make app           Levanta el tablero Streamlit"
 	@echo "  make test          Ejecuta las pruebas"
 	@echo "  make lint          Revisa el código con Ruff"
@@ -19,6 +20,7 @@ help:
 	@echo "  make docker-build  Construye la imagen"
 	@echo "  make docker-app    Levanta Streamlit"
 	@echo "  make docker-data   Ejecuta el pipeline"
+	@echo "  make docker-download Descarga una fuente (FUENTE=SALUD-001)"
 	@echo "  make docker-test   Ejecuta las pruebas"
 	@echo "  make docker-lint   Revisa el código"
 	@echo "  make docker-shell  Abre una terminal"
@@ -36,6 +38,9 @@ install: venv
 
 data: install
 	PYTHONPATH=src $(PY) -m health_data.pipeline
+
+download: install
+	PYTHONPATH=src $(PY) -m health_data.ingestion.descarga $(FUENTE)
 
 app: install
 	PYTHONPATH=src $(VENV)/bin/streamlit run app.py
@@ -68,6 +73,9 @@ docker-app:
 
 docker-data:
 	docker compose run --rm app python -m health_data.pipeline
+
+docker-download:
+	docker compose run --rm app python -m health_data.ingestion.descarga $(FUENTE)
 
 docker-test:
 	docker compose run --rm app python -m pytest tests/ -v

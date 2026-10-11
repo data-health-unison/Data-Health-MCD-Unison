@@ -1,1 +1,2 @@
-ingestion_id,dataset_id,retrieved_at,raw_path,checksum,status,notes
+ingestion_id,dataset_id,retrieved_at,raw_path,checksum,status,notes,download_url
+SALUD-001_20261011T094740,SALUD-001,2026-10-11T09:47:40-07:00,data/raw/ESTABLECIMIENTO_SALUD_202608.xlsx,sha256:5a1cfbe7062b41d9e51249aa4b5fc8a1e623e935882e97fb5f0aac797165c95b,ok,,https://gobi.salud.gob.mx/gobi/catalogos/catalogosmaestros/ESTABLECIMIENTO_SALUD_202608.xlsx
