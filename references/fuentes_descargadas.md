@@ -13,3 +13,15 @@ Catálogo nacional de establecimientos de salud. Una fila por CLUES con instituc
 - SHA-256: `5a1cfbe7062b41d9e51249aa4b5fc8a1e623e935882e97fb5f0aac797165c95b`
 
 El nombre del archivo dice 202608, pero trae movimientos hasta el 22/09/2026.
+
+## INEGI-POP-001: Principales resultados por localidad (ITER)
+
+Principales resultados por localidad del Censo de Población y Vivienda 2020 para Sonora. Un CSV con una fila por localidad, más los totales del estado y de cada municipio y los acumulados de las localidades de una y dos viviendas.
+
+- Fuente: INEGI, inegi.org.mx
+- Descarga: https://www.inegi.org.mx/contenidos/programas/ccpv/iter/zip/iter2020/iter_26csv20.zip
+- Fecha de descarga: 12/10/2026 13:12
+- Archivo crudo: `data/raw/iter_26csv20.zip`
+- SHA-256: `3f3795a7963d9ccdba0b19f61f7b70326ee3a48ef5af6b6b65486ff53542c366`
+
+Las columnas se describen en https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf.

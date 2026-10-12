@@ -9,7 +9,7 @@ import requests
 
 from health_data.ingestion import descarga
 from health_data.ingestion.descarga import ArchivoInvalido, descargar, huella, validar
-from health_data.ingestion.fuentes import Fuente
+from health_data.ingestion.fuentes import FUENTES, Fuente
 from health_data.pipeline import PROJECT_ROOT
 
 
@@ -107,6 +107,24 @@ def test_acepta_libro(tmp_path: Path) -> None:
     ruta = tmp_path / "libro.xlsx"
     escribir_libro(ruta)
     validar(ruta, "xlsx")
+
+
+def test_acepta_zip(tmp_path: Path) -> None:
+    """Comprueba que un ZIP completo con un CSV pase la validación."""
+    ruta = tmp_path / "datos.zip"
+    escribir_zip_sin_libro(ruta)
+    validar(ruta, "zip")
+
+
+def test_fuentes_bien_definidas() -> None:
+    """Comprueba que cada fuente sea única, use https y tenga validador."""
+    ids = [fuente.dataset_id for fuente in FUENTES]
+    archivos = [fuente.archivo for fuente in FUENTES]
+    assert len(set(ids)) == len(ids)
+    assert len(set(archivos)) == len(archivos)
+    for fuente in FUENTES:
+        assert fuente.url.startswith("https://")
+        assert fuente.formato in descarga.VALIDADORES
 
 
 def test_descarga_y_registra(raw: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -27,6 +27,9 @@ class Fuente:
 SALUD_001_PERIODO = "202608"
 SALUD_001_ARCHIVO = f"ESTABLECIMIENTO_SALUD_{SALUD_001_PERIODO}.xlsx"
 
+# El procesamiento de INEGI-POP-001 lee el crudo con este nombre.
+INEGI_POP_001_ARCHIVO = "iter_26csv20.zip"
+
 FUENTES = [
     Fuente(
         dataset_id="SALUD-001",
@@ -46,6 +49,27 @@ FUENTES = [
         nota=(
             "El nombre del archivo dice 202608, pero trae movimientos hasta el "
             "22/09/2026."
+        ),
+    ),
+    Fuente(
+        dataset_id="INEGI-POP-001",
+        nombre="Principales resultados por localidad (ITER)",
+        institucion="INEGI, inegi.org.mx",
+        url=(
+            "https://www.inegi.org.mx/contenidos/programas/ccpv/iter/zip/iter2020/"
+            f"{INEGI_POP_001_ARCHIVO}"
+        ),
+        archivo=INEGI_POP_001_ARCHIVO,
+        formato="zip",
+        descripcion=(
+            "Principales resultados por localidad del Censo de Población y Vivienda "
+            "2020 para Sonora. Un CSV con una fila por localidad, más los totales del "
+            "estado y de cada municipio y los acumulados de las localidades de una y "
+            "dos viviendas."
+        ),
+        nota=(
+            "Las columnas se describen en "
+            "https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf."
         ),
     ),
 ]
