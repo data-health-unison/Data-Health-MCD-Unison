@@ -37,7 +37,7 @@ FUENTES = [
         institucion="Secretaría de Salud, gobi.salud.gob.mx",
         url=(
             "https://gobi.salud.gob.mx/gobi/catalogos/catalogosmaestros/"
-            f"{SALUD_001_ARCHIVO}?v=2026.09.23"
+            f"{SALUD_001_ARCHIVO}"
         ),
         archivo=SALUD_001_ARCHIVO,
         formato="xlsx",
