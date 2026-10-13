@@ -13,9 +13,16 @@ from health_data.pipeline import (
 ARCHIVO_CRUDO = RAW_DATA_DIR / "ESTABLECIMIENTO_SALUD_202608.xlsx"
 HOJA = "CLUES_202608"
 ARCHIVO_SALIDA = PROCESSED_DATA_DIR / "salud-001_establecimientos.parquet"
+ARCHIVO_VERIFICADAS = (
+    PROJECT_ROOT / "references" / "salud-001_coordenadas_verificadas.csv"
+)
 
 CLAVE_SONORA = 26
 EN_OPERACION = "EN OPERACION"
+
+# Resultados de la revisión manual de coordenadas.
+VERIFICADA = "VERIFICADA"
+FUERA_DE_OPERACION = "FUERA DE OPERACION"
 
 # Unidad móvil, unidad médica móvil, brigada móvil y hospital móvil.
 TIPOLOGIAS_MOVILES = ["P", "UMM", "X", "HM"]
@@ -174,7 +181,29 @@ def validar_coordenadas(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def procesar(crudo: pd.DataFrame) -> pd.DataFrame:
+def aplicar_verificadas(df: pd.DataFrame, verificadas: pd.DataFrame) -> pd.DataFrame:
+    """Quita los que ya no operan y pone las coordenadas revisadas por el equipo."""
+    sobran = sorted(set(verificadas["clues"]) - set(df["CLUES"]))
+    if sobran:
+        raise ValueError(
+            f"{ARCHIVO_VERIFICADAS.name} trae CLUES que no están entre los "
+            "establecimientos de Sonora en operación (sin unidades móviles): "
+            + ", ".join(sobran)
+        )
+    resultado = verificadas["resultado"]
+    cerrados = verificadas.loc[resultado.eq(FUERA_DE_OPERACION), "clues"]
+    nuevas = verificadas[resultado.eq(VERIFICADA)].set_index("clues")
+
+    df = df[~df["CLUES"].isin(cerrados)]
+    verificada = df["CLUES"].isin(nuevas.index)
+    return df.assign(
+        latitud=df["latitud"].mask(verificada, df["CLUES"].map(nuevas["latitud"])),
+        longitud=df["longitud"].mask(verificada, df["CLUES"].map(nuevas["longitud"])),
+        fuente_coordenada=df["fuente_coordenada"].mask(verificada, VERIFICADA),
+    )
+
+
+def procesar(crudo: pd.DataFrame, verificadas: pd.DataFrame) -> pd.DataFrame:
     """Convierte la hoja de CLUES en la tabla tidy de establecimientos de Sonora."""
     df = (
         filtrar(crudo)
@@ -183,6 +212,7 @@ def procesar(crudo: pd.DataFrame) -> pd.DataFrame:
         .pipe(agregar_claves)
         .pipe(agregar_sector)
         .pipe(validar_coordenadas)
+        .pipe(aplicar_verificadas, verificadas)
     )
     df["fecha_inicio_operacion"] = pd.to_datetime(
         df["FECHA DE INICIO DE OPERACION"], format="%d/%m/%Y"
@@ -192,11 +222,12 @@ def procesar(crudo: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    """Lee el crudo, lo procesa y guarda la tabla en Parquet."""
+    """Lee el crudo y la revisión manual, los procesa y guarda la tabla en Parquet."""
     ensure_directories()
 
     crudo = pd.read_excel(ARCHIVO_CRUDO, sheet_name=HOJA)
-    tabla = procesar(crudo)
+    verificadas = pd.read_csv(ARCHIVO_VERIFICADAS)
+    tabla = procesar(crudo, verificadas)
     tabla.to_parquet(ARCHIVO_SALIDA, index=False)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
