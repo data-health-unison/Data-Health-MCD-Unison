@@ -30,6 +30,9 @@ SALUD_001_ARCHIVO = f"ESTABLECIMIENTO_SALUD_{SALUD_001_PERIODO}.xlsx"
 # El procesamiento de INEGI-POP-001 lee el crudo con este nombre.
 INEGI_POP_001_ARCHIVO = "iter_26csv20.zip"
 
+# El INEGI lo publica como 26_sonora.zip; el nombre local lleva el año del marco.
+INEGI_GEO_001_ARCHIVO = "mg2025_26_sonora.zip"
+
 FUENTES = [
     Fuente(
         dataset_id="SALUD-001",
@@ -70,6 +73,26 @@ FUENTES = [
         nota=(
             "Las columnas se describen en "
             "https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf."
+        ),
+    ),
+    Fuente(
+        dataset_id="INEGI-GEO-001",
+        nombre="Marco Geoestadístico 2025",
+        institucion="INEGI, inegi.org.mx",
+        url=(
+            "https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/"
+            "espanol/bvinegi/productos/geografia/marcogeo/794551163061/26_sonora.zip"
+        ),
+        archivo=INEGI_GEO_001_ARCHIVO,
+        formato="zip",
+        descripcion=(
+            "Cartografía de Sonora en shapefile: límites del estado y de los "
+            "municipios, AGEB, localidades amanzanadas (polígonos) y rurales "
+            "(puntos), manzanas, vialidades y servicios."
+        ),
+        nota=(
+            "Producto 794551163061, con fecha de referencia 31/07/2025 según sus "
+            "metadatos. Las coordenadas están en metros (EPSG:6372)."
         ),
     ),
 ]

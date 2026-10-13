@@ -25,3 +25,15 @@ Principales resultados por localidad del Censo de Población y Vivienda 2020 par
 - SHA-256: `3f3795a7963d9ccdba0b19f61f7b70326ee3a48ef5af6b6b65486ff53542c366`
 
 Las columnas se describen en https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf.
+
+## INEGI-GEO-001: Marco Geoestadístico 2025
+
+Cartografía de Sonora en shapefile: límites del estado y de los municipios, AGEB, localidades amanzanadas (polígonos) y rurales (puntos), manzanas, vialidades y servicios.
+
+- Fuente: INEGI, inegi.org.mx
+- Descarga: https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/marcogeo/794551163061/26_sonora.zip
+- Fecha de descarga: 13/10/2026 12:36
+- Archivo crudo: `data/raw/mg2025_26_sonora.zip`
+- SHA-256: `d7ba6400ba89a0925a38dd67a0d0228f5d99a47e135667c48105c4732bbf0188`
+
+Producto 794551163061, con fecha de referencia 31/07/2025 según sus metadatos. Las coordenadas están en metros (EPSG:6372).
