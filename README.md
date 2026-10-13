@@ -69,11 +69,12 @@ Data-Health-MCD-Unison/
 - Python 3.12
 - pandas y NumPy
 - PyArrow y Parquet
+- GeoPandas
 - Plotly y Streamlit
 - pytest y Ruff
 - Docker y Docker Compose
 
-No se utiliza Django, PostgreSQL, GeoPandas ni Shapely.
+No se utiliza Django ni PostgreSQL.
 
 ## Uso con Docker
 
