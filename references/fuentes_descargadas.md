@@ -37,3 +37,15 @@ Cartografía de Sonora en shapefile: límites del estado y de los municipios, AG
 - SHA-256: `d7ba6400ba89a0925a38dd67a0d0228f5d99a47e135667c48105c4732bbf0188`
 
 Producto 794551163061, con fecha de referencia 31/07/2025 según sus metadatos. Las coordenadas están en metros (EPSG:6372).
+
+## CONEVAL-ACC-001: Grado de accesibilidad a carretera pavimentada 2020 (GACP)
+
+Grado de accesibilidad a carretera pavimentada de cada localidad del país, con sus tres componentes: distancia a carretera pavimentada, tiempo al centro de servicios más cercano y transporte público a la cabecera municipal. Población del Censo 2020.
+
+- Fuente: CONEVAL, coneval.org.mx
+- Descarga: https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Shapefile_localidades_componentes_GACP_CONEVAL.zip
+- Fecha de descarga: 16/10/2026 09:30
+- Archivo crudo: `data/raw/coneval_gacp2020_localidades.zip`
+- SHA-256: `f3b55b871607987eabaec555f33a864cb0d4f43f6cc785a8c3d9351f9861faca`
+
+Publicado el 15/06/2021. Licencia CC BY-NC 2.5 MX: uso no comercial y citando la fuente. CONEVAL desapareció en 2025; si el enlace deja de funcionar, buscar la copia que resguarda el INEGI. Metodología: https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Documento_metodologico_GACP_2020.pdf
