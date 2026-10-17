@@ -149,7 +149,7 @@ routing_status
 ### API SAKBÉ
 
 El cliente está en `src/health_data/ingestion/sakbe.py`. Requiere un token de
-INEGI ([solicitarlo aquí](https://www.inegi.org.mx/servicios/Ruteo/)):
+INEGI ([solicitarlo aquí](https://gaia.inegi.org.mx/sakbe_v3.1/genera_token.jsp)):
 
 ```bash
 cp .env.example .env   #colocar SAKBE_TOKENS=<token1>,<token2>
