@@ -142,8 +142,29 @@ routing_status
 - [x] Catálogo de fuentes e ingesta configurable.
 - [x] Limpieza y validación de ITER, CONEVAL y CLUES.
 - [x] Dataset consolidado por localidad.
-- [ ] Integración con SAKBÉ.
+- [x] Cliente de la API SAKBÉ (token, caché, cuota y reintentos).
+- [ ] Integración de SAKBÉ en el cálculo de ruteo.
 - [ ] Validación de tiempos mediante rutas reales.
+
+### API SAKBÉ
+
+El cliente está en `src/health_data/ingestion/sakbe.py`. Requiere un token de
+INEGI ([solicitarlo aquí](https://www.inegi.org.mx/servicios/Ruteo/)):
+
+```bash
+cp .env.example .env   #colocar SAKBE_TOKENS=<token1>,<token2>
+docker compose run --rm app python -m health_data.ingestion.sakbe           #estado de cuota y caché
+docker compose run --rm app python -m health_data.ingestion.sakbe --probar  #ruta de prueba
+```
+
+- Las respuestas se guardan en `data/interim/sakbe_cache.sqlite`; una consulta
+  repetida (incluso si no hubo ruta) no vuelve a gastar cuota.
+- Cada petición real se contabiliza por día y por token. Al llegar a
+  `limite_diario` (`config/fuentes_health.yaml`, 2500 por omisión), o si el
+  servidor rechaza un token, el cliente pasa al siguiente. Cuando todos se
+  agotan se detiene con `SakbeCuotaAgotada`.
+- Cada ruta guarda su fecha de consulta (`consultado_en`), ya que la red se
+  actualiza cada año.
 
 ### Estado actual del ruteo
 
