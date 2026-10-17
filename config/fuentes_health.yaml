@@ -1,0 +1,54 @@
+# Configuración de fuentes y umbrales del proyecto Data Health MCD Unison.
+# Accesibilidad a Servicios de Salud en Sonora.
+
+# Umbrales analíticos y de calidad
+umbrales:
+  tiempo_critico_min: 60           # > 60 min hacia 1er nivel: accesibilidad comprometida
+  tiempo_muy_critico_min: 120      # > 120 min hacia 1er nivel: accesibilidad crítica
+  tiempo_critico_segundo_nivel_min: 180  # > 180 min hacia 2do nivel (hospital general)
+  poblacion_min_localidad: 100     # corte referencial de tamaño de localidad
+  sakbe_limite_diario: 2500        # cuota diaria estimada de consultas API SAKBÉ
+  cv_no_fiable: 0.25               # coeficiente de variación máximo aceptable
+
+# Fuentes de datos del proyecto
+fuentes:
+  CONEVAL-ACC-001:
+    dataset_id: "CONEVAL-ACC-001"
+    nombre: "Grado de accesibilidad a carretera pavimentada 2020 (GACP)"
+    url: "https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Shapefile_localidades_componentes_GACP_CONEVAL.zip"
+    nombre_archivo: "coneval_gacp2020_localidades.zip"
+    estado: "approved"
+    prioridad: "alta"
+
+  INEGI-POP-001:
+    dataset_id: "INEGI-POP-001"
+    nombre: "Principales resultados por localidad (ITER) - Censo 2020 Sonora"
+    url: "https://www.inegi.org.mx/contenidos/programas/ccpv/iter/zip/iter2020/iter_26csv20.zip"
+    nombre_archivo: "iter_26csv20.zip"
+    estado: "approved"
+    prioridad: "alta"
+
+  SALUD-001:
+    dataset_id: "SALUD-001"
+    nombre: "Establecimientos de salud (CLUES)"
+    url: "https://gobi.salud.gob.mx/gobi/catalogos/catalogosmaestros/ESTABLECIMIENTO_SALUD_202608.xlsx"
+    nombre_archivo: "ESTABLECIMIENTO_SALUD_202608.xlsx"
+    estado: "approved"
+    prioridad: "alta"
+
+  INEGI-GEO-001:
+    dataset_id: "INEGI-GEO-001"
+    nombre: "Marco Geoestadístico 2025"
+    url: "https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/marcogeo/794551163061/26_sonora.zip"
+    nombre_archivo: "mg2025_26_sonora.zip"
+    estado: "approved"
+    prioridad: "media"
+
+  INEGI-ROUTE-001:
+    dataset_id: "INEGI-ROUTE-001"
+    nombre: "SAKBÉ - API de Ruteo Red Carretera INEGI"
+    api_base: "https://www.inegi.org.mx/servicios/Ruteo/v3.1/"
+    token_env: "SAKBE_TOKEN"
+    limite_diario: 2500
+    estado: "approved"
+    prioridad: "alta"

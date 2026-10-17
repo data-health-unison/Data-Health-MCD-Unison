@@ -69,11 +69,12 @@ Data-Health-MCD-Unison/
 - Python 3.12
 - pandas y NumPy
 - PyArrow y Parquet
+- GeoPandas
 - Plotly y Streamlit
 - pytest y Ruff
 - Docker y Docker Compose
 
-No se utiliza Django, PostgreSQL, GeoPandas ni Shapely.
+No se utiliza Django ni PostgreSQL.
 
 ## Uso con Docker
 
@@ -137,13 +138,21 @@ routing_status
 
 - [x] Problema y alcance definidos.
 - [x] Estructura Cookiecutter Data Science.
-- [x] Configuración inicial de Docker.
-- [ ] Catálogo de fuentes.
-- [ ] Ingesta de datos.
-- [ ] Limpieza y validación.
+- [x] Configuración de Docker y tablero Streamlit.
+- [x] Catálogo de fuentes e ingesta configurable.
+- [x] Limpieza y validación de ITER, CONEVAL y CLUES.
+- [x] Dataset consolidado por localidad.
 - [ ] Integración con SAKBÉ.
-- [ ] Dataset final.
-- [ ] Dashboard.
+- [ ] Validación de tiempos mediante rutas reales.
+
+### Estado actual del ruteo
+
+El dataset consolidado disponible se genera asignando el establecimiento más
+cercano por distancia geodésica y estimando distancia y tiempo con un factor de
+sinuosidad y velocidades promedio por tramo. **El módulo aún no consulta la API
+SAKBÉ**; por ello, estos tiempos son aproximaciones exploratorias y no deben
+interpretarse como rutas o tiempos medidos en la red carretera. La integración
+con SAKBÉ y la validación de resultados siguen pendientes.
 
 ## Alcance y limitaciones
 
