@@ -10,7 +10,6 @@ import logging
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -18,9 +17,9 @@ _RAIZ = Path(__file__).resolve().parent
 if str(_RAIZ) not in sys.path:
     sys.path.insert(0, str(_RAIZ))
 
-from health_data import config
-from health_data.processing import cartografia
-from health_data.visualization import mapas
+from health_data import config  # noqa: E402
+from health_data.processing import cartografia  # noqa: E402
+from health_data.visualization import mapas  # noqa: E402
 
 log = logging.getLogger("health_data.tablero")
 
@@ -211,12 +210,6 @@ def main() -> None:
     col_tiempo = (
         "primary_time_min" if es_primer_nivel else "secondary_time_min"
     )
-    col_clues = (
-        "nearest_primary_clues"
-        if es_primer_nivel
-        else "nearest_secondary_clues"
-    )
-
     # Si la tabla actual es solo el intermedio de CONEVAL (sin ruteo aún)
     tiene_ruteo = col_tiempo in tabla.columns
 
@@ -236,18 +229,50 @@ def main() -> None:
         c1.metric("Localidades analizadas", f"{len(tabla):,}")
 
         if tiene_ruteo:
-            rutas_ok = int(tabla["routing_status"].eq("ok").sum()) if "routing_status" in tabla.columns else len(tabla)
-            c2.metric("Con ruta en red carretera", f"{rutas_ok:,}")
-            mediana_tiempo = float(tabla[col_tiempo].median()) if col_tiempo in tabla.columns else 0.0
+            metodo = (
+                str(tabla["routing_method"].iloc[0])
+                if "routing_method" in tabla.columns and not tabla.empty
+                else "unknown"
+            )
+            rutas_ok = (
+                int(tabla["routing_status"].eq("sakbe_ok").sum())
+                if metodo == "sakbe" and "routing_status" in tabla.columns
+                else 0
+            )
+            if metodo == "sakbe":
+                c2.metric("Rutas SAKBÉ completas", f"{rutas_ok:,}")
+            else:
+                estimadas = (
+                    int(tabla["routing_status"].eq("estimated").sum())
+                    if "routing_status" in tabla.columns
+                    else 0
+                )
+                c2.metric("Localidades estimadas", f"{estimadas:,}")
+            mediana_tiempo = float(tabla[col_tiempo].median())
             c3.metric("Tiempo mediano", f"{mediana_tiempo:.1f} min")
-            criticas = int((tabla[col_tiempo] > controles["umbral_critico"]).sum()) if col_tiempo in tabla.columns else 0
+            criticas = int(
+                (tabla[col_tiempo] > controles["umbral_critico"]).sum()
+            )
             c4.metric(f"> {controles['umbral_critico']} min", f"{criticas:,}")
 
+            if metodo != "sakbe":
+                st.warning(
+                    "Los tiempos mostrados son estimaciones por distancia geodésica; "
+                    "no son rutas ni tiempos calculados por SAKBÉ."
+                )
+            elif rutas_ok < len(tabla):
+                st.warning(
+                    f"Hay {len(tabla) - rutas_ok:,} localidades sin ruta SAKBÉ "
+                    "completa; sus tiempos aparecen vacíos."
+                )
             st.plotly_chart(
                 mapas.mapa_localidades(
                     tabla,
                     columna=col_tiempo,
-                    titulo=f"Tiempo de traslado al {controles['nivel']} más cercano",
+                    titulo=(
+                        f"{'Estimación de tiempo' if metodo != 'sakbe' else 'Tiempo SAKBÉ'} "
+                        f"al candidato geodésico de {controles['nivel']}"
+                    ),
                 ),
                 use_container_width=True,
             )

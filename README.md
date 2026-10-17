@@ -90,6 +90,24 @@ docker compose build
 docker compose run --rm app python -m health_data.pipeline
 ```
 
+Por defecto el pipeline genera estimaciones exploratorias, identificadas como
+`routing_method=estimated`; no las presenta como cobertura SAKBÉ.
+
+Para solicitar rutas reales, define el token de INEGI solo en la sesión actual
+de PowerShell y elige SAKBÉ explícitamente:
+
+```powershell
+$env:SAKBE_TOKEN = "<token de INEGI>"
+docker compose run --rm app python -m health_data.pipeline --ruteo sakbe
+```
+
+El cliente sigue la API documentada de INEGI (`buscalinea` y `optima` para
+automóvil), registra las consultas diarias en una caché SQLite local bajo
+`data/interim/` y respeta el límite diario configurado. Si se agota la cuota,
+conserva los resultados obtenidos y marca las rutas pendientes; vuelve a
+ejecutar el comando en otro día para continuar usando la caché. Los errores no
+se sustituyen por tiempos estimados.
+
 ### Ejecutar las pruebas
 
 ```powershell
@@ -125,14 +143,20 @@ municipality_name
 population
 latitude
 longitude
-nearest_primary_clues
+primary_candidate_clues
 primary_distance_km
 primary_time_min
-nearest_secondary_clues
+secondary_candidate_clues
 secondary_distance_km
 secondary_time_min
 routing_status
 ```
+
+Los estados globales son `estimated`, `sakbe_ok`, `partial`, `no_route`,
+`api_error` y `quota_exceeded`; cada nivel conserva además su propio estado.
+Los CLUES se guardan como candidatos geodésicos (`*_candidate_clues`), no se
+afirman como el establecimiento de menor tiempo por carretera: SAKBÉ calcula
+la ruta únicamente hasta ese candidato.
 
 ## Estado
 
@@ -142,17 +166,18 @@ routing_status
 - [x] Catálogo de fuentes e ingesta configurable.
 - [x] Limpieza y validación de ITER, CONEVAL y CLUES.
 - [x] Dataset consolidado por localidad.
-- [ ] Integración con SAKBÉ.
+- [x] Integración configurable con SAKBÉ y control local de cuota/caché.
 - [ ] Validación de tiempos mediante rutas reales.
 
 ### Estado actual del ruteo
 
-El dataset consolidado disponible se genera asignando el establecimiento más
-cercano por distancia geodésica y estimando distancia y tiempo con un factor de
-sinuosidad y velocidades promedio por tramo. **El módulo aún no consulta la API
-SAKBÉ**; por ello, estos tiempos son aproximaciones exploratorias y no deben
-interpretarse como rutas o tiempos medidos en la red carretera. La integración
-con SAKBÉ y la validación de resultados siguen pendientes.
+En modo `estimated`, se escoge el candidato por distancia geodésica y se calcula
+una aproximación con factor de sinuosidad y velocidad promedio por tramo. En
+modo `sakbe`, se consulta la API para ese candidato y se conservan por separado
+la distancia y el tiempo devueltos para cada nivel. La selección del candidato
+continúa siendo geodésica, por lo que todavía debe validarse si corresponde al
+establecimiento con menor tiempo real de viaje. No se ejecuta SAKBÉ sin una
+solicitud explícita y un token de INEGI.
 
 ## Alcance y limitaciones
 

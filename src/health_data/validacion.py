@@ -13,6 +13,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from health_data.config import ARCHIVO_TABLA_FINAL
@@ -26,14 +27,35 @@ COLUMNAS_MINIMAS_REQUERIDAS = [
     "population",
     "latitude",
     "longitude",
-    "nearest_primary_clues",
+    "primary_candidate_clues",
     "primary_distance_km",
     "primary_time_min",
-    "nearest_secondary_clues",
+    "primary_routing_status",
+    "secondary_candidate_clues",
     "secondary_distance_km",
     "secondary_time_min",
+    "secondary_routing_status",
+    "routing_method",
+    "facility_selection_method",
     "routing_status",
 ]
+
+ESTADOS_POR_NIVEL = {
+    "estimated",
+    "sakbe_ok",
+    "no_route",
+    "api_error",
+    "quota_exceeded",
+    "invalid_coordinates",
+}
+ESTADOS_GLOBALES = {
+    "estimated",
+    "sakbe_ok",
+    "partial",
+    "no_route",
+    "api_error",
+    "quota_exceeded",
+}
 
 
 @dataclass
@@ -65,6 +87,11 @@ class ReporteValidacion:
     @property
     def paso(self) -> bool:
         return not self.fallidas
+
+    @property
+    def todas_pasan(self) -> bool:
+        """Alias descriptivo para consumidores del reporte."""
+        return self.paso
 
     def agregar(self, comprobacion: Comprobacion) -> None:
         self.comprobaciones.append(comprobacion)
@@ -135,54 +162,207 @@ def validar_tabla_final(tabla: pd.DataFrame) -> ReporteValidacion:
             )
         )
 
-    # 4. Tiempos de traslado no negativos
-    for col in ("primary_time_min", "secondary_time_min"):
+    # 4. Distancias y tiempos deben ser no negativos y finitos cuando existan.
+    for col in (
+        "primary_distance_km",
+        "primary_time_min",
+        "secondary_distance_km",
+        "secondary_time_min",
+    ):
         if col in tabla.columns:
             valores = pd.to_numeric(tabla[col], errors="coerce")
-            negativos = int((valores < 0).sum())
+            invalidos = int(
+                (valores.notna() & ((valores < 0) | ~values_finite(valores))).sum()
+            )
             reporte.agregar(
                 Comprobacion(
-                    nombre=f"sin_{col}_negativos",
-                    paso=negativos == 0,
-                    detalle=f"No hay tiempos negativos en {col}."
-                    if negativos == 0
-                    else f"{negativos} filas con tiempo negativo.",
+                    nombre=f"{col}_valida",
+                    paso=invalidos == 0,
+                    detalle=f"{col} no contiene valores negativos ni infinitos."
+                    if invalidos == 0
+                    else f"{invalidos} valores inválidos en {col}.",
                 )
             )
 
-    # 5. Coherencia: distancia al 2do nivel >= distancia al 1er nivel en general
-    if {"primary_time_min", "secondary_time_min"}.issubset(tabla.columns):
-        t1 = pd.to_numeric(tabla["primary_time_min"], errors="coerce")
-        t2 = pd.to_numeric(tabla["secondary_time_min"], errors="coerce")
-        ambos = t1.notna() & t2.notna()
-        if ambos.any():
-            # En la gran mayoría de los casos, el 2do nivel (hospital) está más lejos o a la misma distancia que el 1er nivel
-            segundo_mas_cercano = int((t2 < t1 - 1.0).sum())
-            # Es informativo pero no necesariamente un error si la localidad alberga un hospital de 2do nivel que también da consulta general
+    columnas_estado = (
+        "primary_routing_status",
+        "secondary_routing_status",
+    )
+    columnas_de_ruteo = [
+        *columnas_estado,
+        "routing_method",
+        "facility_selection_method",
+        "routing_status",
+        "primary_distance_km",
+        "primary_time_min",
+        "secondary_distance_km",
+        "secondary_time_min",
+    ]
+    if all(col in tabla.columns for col in columnas_de_ruteo):
+        for col in columnas_estado:
+            invalido = ~tabla[col].isin(ESTADOS_POR_NIVEL)
             reporte.agregar(
                 Comprobacion(
-                    nombre="consistencia_tiempos_1er_y_2do_nivel",
-                    paso=True,
-                    detalle=f"Tiempos comparados en {int(ambos.sum())} localidades; en {segundo_mas_cercano} el 2do nivel está más próximo.",
+                    nombre=f"{col}_valido",
+                    paso=not invalido.any(),
+                    detalle=f"Estados válidos en {col}."
+                    if not invalido.any()
+                    else f"Estados desconocidos en {col}: "
+                    f"{sorted(tabla.loc[invalido, col].astype(str).unique())}.",
                 )
             )
 
-    # 6. Estatus de ruteo
-    if "routing_status" in tabla.columns:
-        con_ruta = int(tabla["routing_status"].eq("ok").sum())
-        total = len(tabla)
-        cobertura = con_ruta / total if total > 0 else 0
+        metodo = tabla["routing_method"].astype("string")
+        metodos_validos = metodo.isin({"estimated", "sakbe"})
         reporte.agregar(
             Comprobacion(
-                nombre="cobertura_ruteo_sakbe",
-                paso=cobertura >= 0.70,
-                detalle=f"Ruta obtenida en {con_ruta:,} de {total:,} ({cobertura:.1%}) localidades.",
-                valor=cobertura,
-                esperado=0.70,
+                nombre="metodo_ruteo_valido",
+                paso=bool(metodos_validos.all() and metodo.nunique() == 1),
+                detalle="Todas las filas usan el mismo método de ruteo."
+                if metodos_validos.all() and metodo.nunique() == 1
+                else "Debe existir un único método válido ('estimated' o 'sakbe') "
+                "por dataset.",
+            )
+        )
+        seleccion = tabla["facility_selection_method"]
+        seleccion_valida = seleccion.eq("nearest_geodesic")
+        reporte.agregar(
+            Comprobacion(
+                nombre="seleccion_de_establecimiento_identificada",
+                paso=bool(seleccion_valida.all()),
+                detalle="Se declara que el candidato se elige por distancia geodésica."
+                if seleccion_valida.all()
+                else "La selección del establecimiento no está declarada o no es válida.",
             )
         )
 
+        filas_estimadas = metodo.eq("estimated")
+        estados_estimados = tabla.loc[filas_estimadas, list(columnas_estado)]
+        estados_sakbe = tabla.loc[~filas_estimadas, list(columnas_estado)]
+        estimadas_marcadas = (
+            estados_estimados.eq("estimated")
+            | estados_estimados.eq("invalid_coordinates")
+        ).all(axis=None)
+        reales_marcadas = (
+            estados_sakbe.isin(ESTADOS_POR_NIVEL - {"estimated"}).all(axis=None)
+        )
+        reporte.agregar(
+            Comprobacion(
+                nombre="metodo_y_estado_coherentes",
+                paso=bool(estimadas_marcadas and reales_marcadas),
+                detalle="Las estimaciones y consultas SAKBÉ tienen estados separados."
+                if estimadas_marcadas and reales_marcadas
+                else "Hay filas cuyo estado de ruta no corresponde con routing_method.",
+            )
+        )
+
+        ambos_ok = tabla[list(columnas_estado)].eq("sakbe_ok").all(axis=1)
+        valores_completos = tabla[
+            [
+                "primary_distance_km",
+                "primary_time_min",
+                "secondary_distance_km",
+                "secondary_time_min",
+            ]
+        ].notna().all(axis=1)
+        completa = ambos_ok & valores_completos
+        estimadas_validas = estados_estimados.apply(
+            lambda fila: fila.isin({"estimated", "invalid_coordinates"}).all(),
+            axis=1,
+        )
+        metricas_por_nivel = []
+        for campo_estado, campo_dist, campo_tiempo in (
+            (
+                "primary_routing_status",
+                "primary_distance_km",
+                "primary_time_min",
+            ),
+            (
+                "secondary_routing_status",
+                "secondary_distance_km",
+                "secondary_time_min",
+            ),
+        ):
+            requiere_metricas = tabla[campo_estado].isin({"estimated", "sakbe_ok"})
+            presentes = tabla[[campo_dist, campo_tiempo]].notna().all(axis=1)
+            metricas_por_nivel.append(requiere_metricas.eq(presentes))
+        metricas_coherentes = pd.concat(metricas_por_nivel, axis=1).all(axis=1)
+        reporte.agregar(
+            Comprobacion(
+                nombre="metricas_y_estado_coherentes",
+                paso=bool(metricas_coherentes.all()),
+                detalle="Cada nivel conserva solo métricas respaldadas por su estado."
+                if metricas_coherentes.all()
+                else "Hay métricas faltantes o asignadas a un estado sin ruta.",
+            )
+        )
+
+        estado_global_esperado = []
+        for _, fila in tabla.iterrows():
+            p = fila["primary_routing_status"]
+            s = fila["secondary_routing_status"]
+            if fila["routing_method"] == "estimated":
+                esperado = "estimated" if p == s == "estimated" else "no_route"
+            elif p == s == "sakbe_ok":
+                esperado = "sakbe_ok"
+            elif p == "sakbe_ok" or s == "sakbe_ok":
+                esperado = "partial"
+            elif "quota_exceeded" in (p, s):
+                esperado = "quota_exceeded"
+            elif "api_error" in (p, s):
+                esperado = "api_error"
+            else:
+                esperado = "no_route"
+            estado_global_esperado.append(esperado)
+        ruta_global_correcta = tabla["routing_status"].eq(estado_global_esperado)
+        reporte.agregar(
+            Comprobacion(
+                nombre="routing_status_coherente",
+                paso=bool(ruta_global_correcta.all()),
+                detalle="El estado global coincide con los resultados por nivel."
+                if ruta_global_correcta.all()
+                else "Hay estados globales que no coinciden con los resultados por nivel.",
+            )
+        )
+        total = len(tabla)
+        cobertura = int(completa.sum()) / total if total else 0.0
+        es_estimado = bool(filas_estimadas.all())
+        cobertura_valida = es_estimado or cobertura >= 0.70
+        detalle_cobertura = (
+            "Dataset de estimaciones; no se reporta como cobertura SAKBÉ."
+            if es_estimado
+            else f"Rutas SAKBÉ completas en {int(completa.sum()):,} de "
+            f"{total:,} localidades ({cobertura:.1%})."
+        )
+        reporte.agregar(
+            Comprobacion(
+                nombre="cobertura_real_sakbe",
+                paso=cobertura_valida,
+                detalle=detalle_cobertura
+                if cobertura_valida
+                else f"{detalle_cobertura} Se requiere al menos 70%.",
+                valor=cobertura,
+                esperado="0% para estimaciones; >=70% para SAKBÉ",
+            )
+        )
+        if not estados_estimados.empty:
+            reporte.agregar(
+                Comprobacion(
+                    nombre="estimaciones_con_valores",
+                    paso=bool(estimadas_validas.all()),
+                    detalle="Las filas estimadas contienen distancias y tiempos."
+                    if estimadas_validas.all()
+                    else "Una fila estimada tiene un estado de ruteo inesperado.",
+                )
+            )
+
     return reporte
+
+
+def values_finite(values: pd.Series) -> pd.Series:
+    """Devuelve máscara para valores numéricos finitos."""
+    arr = values.to_numpy(dtype=float, na_value=np.nan)
+    return pd.Series(np.isfinite(arr), index=values.index)
 
 
 def validar_archivo_procesado(ruta: Path | None = None) -> ReporteValidacion:
@@ -212,6 +392,11 @@ def validar_archivo_procesado(ruta: Path | None = None) -> ReporteValidacion:
             )
         )
         return reporte
+
+
+def ejecutar_todas() -> ReporteValidacion:
+    """Ejecuta las validaciones del Parquet final configurado."""
+    return validar_archivo_procesado()
 
 
 def main(argv: list[str] | None = None) -> int:

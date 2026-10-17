@@ -1,25 +1,34 @@
-"""Módulo de ruteo y emparejamiento con establecimientos de salud de 1er y 2do nivel.
+"""Ruteo y emparejamiento con establecimientos de salud de 1er y 2do nivel.
 
 Para cada localidad de Sonora:
 1. Identifica el establecimiento operativo de primer nivel (centro de salud) más cercano.
 2. Identifica el establecimiento operativo de segundo nivel (hospital) más cercano.
-3. Estima distancia y tiempo de traslado considerando factor de sinuosidad vial y velocidad de red carretera.
-4. Soporta integración y respaldo con API SAKBÉ de INEGI.
+3. Calcula rutas con SAKBÉ o, en modo estimado explícito, aproxima distancia y tiempo.
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
 
 from health_data.config import (
+    ARCHIVO_CACHE_SAKBE,
     ARCHIVO_TABLA_FINAL,
     PROCESSED_DATA_DIR,
     PROJECT_ROOT,
+    cargar_configuracion,
     ensure_directories,
+)
+from health_data.processing.sakbe import (
+    RouteResult,
+    SakbeClient,
+    SakbeError,
+    SakbeFatalError,
+    SakbeQuotaExceeded,
+    crear_cliente_desde_entorno,
 )
 
 log = logging.getLogger(__name__)
@@ -30,6 +39,31 @@ ARCHIVO_SALUD = PROCESSED_DATA_DIR / "salud-001_establecimientos.parquet"
 
 # Factor medio de sinuosidad carretera para el terreno de Sonora (relación red vial / línea recta)
 FACTOR_SINUOSIDAD = 1.28
+LATITUD_MIN_SONORA = 25.5
+LATITUD_MAX_SONORA = 33.0
+LONGITUD_MIN_SONORA = -116.0
+LONGITUD_MAX_SONORA = -108.0
+
+
+def _coordenadas_validas_sonora(
+    latitud: float | np.ndarray, longitud: float | np.ndarray
+) -> bool | np.bool_ | np.ndarray:
+    return (
+        np.isfinite(latitud)
+        & np.isfinite(longitud)
+        & (latitud >= LATITUD_MIN_SONORA)
+        & (latitud <= LATITUD_MAX_SONORA)
+        & (longitud >= LONGITUD_MIN_SONORA)
+        & (longitud <= LONGITUD_MAX_SONORA)
+    )
+
+
+class ClienteRuteo(Protocol):
+    """Contrato mínimo requerido por el cálculo de rutas."""
+
+    def calcular_ruta(
+        self, origen: tuple[float, float], destino: tuple[float, float]
+    ) -> RouteResult | None: ...
 
 
 def distancia_haversine(
@@ -52,7 +86,7 @@ def distancia_haversine(
 
 def estimar_velocidad_promedio(distancia_carretera_km: np.ndarray) -> np.ndarray:
     """Estima la velocidad media según la longitud del trayecto por tipo de vía."""
-    velocidad = np.empty_like(distancia_carretera_km, dtype=float)
+    velocidad = np.full_like(distancia_carretera_km, np.nan, dtype=float)
     # Trayectos muy cortos (calles urbanas / caminos vecinales)
     m1 = distancia_carretera_km <= 5.0
     velocidad[m1] = 35.0
@@ -73,37 +107,22 @@ def emparejar_mas_cercano(
     lons_loc: np.ndarray,
     facilidades: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Calcula el establecimiento más cercano en vector para todas las localidades.
+    """Estima el candidato más cercano por línea recta y sus tiempos aproximados.
 
     Returns:
-        (clues_mas_cercano, distancia_carretera_km, tiempo_traslado_min)
+        (clues_candidato, distancia_estimada_km, tiempo_estimado_min)
     """
-    lats_f = facilidades["latitud"].to_numpy()[None, :]
-    lons_f = facilidades["longitud"].to_numpy()[None, :]
-    clues_f = facilidades["clues"].to_numpy()
-
-    # Matriz (N_localidades, M_establecimientos)
-    matriz_dist = distancia_haversine(
-        lats_loc[:, None], lons_loc[:, None], lats_f, lons_f
+    indices_min, dist_recta_km = _candidatos_geodesicos(
+        lats_loc, lons_loc, facilidades
     )
-
-    indices_min = np.argmin(matriz_dist, axis=1)
-    dist_recta_km = np.take_along_axis(
-        matriz_dist, indices_min[:, None], axis=1
-    ).squeeze(axis=1)
-
-    clues_cercano = clues_f[indices_min]
-
-    # Distancia estimada por carretera aplicando factor de sinuosidad
     dist_carretera_km = dist_recta_km * FACTOR_SINUOSIDAD
-
-    # Tiempo en minutos según velocidad de perfil vial
     velocidades = estimar_velocidad_promedio(dist_carretera_km)
     tiempo_min = (dist_carretera_km / velocidades) * 60.0
-
-    # Mínimo 3 minutos de tiempo base si la clínica está en la misma localidad
     tiempo_min = np.maximum(tiempo_min, 3.0)
-
+    clues = facilidades["clues"].to_numpy()
+    clues_cercano = np.full(len(lats_loc), None, dtype=object)
+    validas = indices_min >= 0
+    clues_cercano[validas] = clues[indices_min[validas]]
     return (
         clues_cercano,
         np.round(dist_carretera_km, 2),
@@ -111,9 +130,155 @@ def emparejar_mas_cercano(
     )
 
 
-def consolidar_dataset_final() -> pd.DataFrame:
+def _candidatos_geodesicos(
+    lats_loc: np.ndarray,
+    lons_loc: np.ndarray,
+    facilidades: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Busca el candidato por distancia geodésica, sin afirmar que sea ruta vial."""
+    if facilidades.empty:
+        raise ValueError("No hay establecimientos válidos para el nivel solicitado.")
+    lats_fac_todas = facilidades["latitud"].to_numpy(dtype=float)
+    lons_fac_todas = facilidades["longitud"].to_numpy(dtype=float)
+    facilidades_validas = _coordenadas_validas_sonora(
+        lats_fac_todas, lons_fac_todas
+    )
+    indices_facilidades = np.flatnonzero(facilidades_validas)
+    if len(indices_facilidades) == 0:
+        raise ValueError("No hay establecimientos con coordenadas válidas en Sonora.")
+    lats_fac = lats_fac_todas[facilidades_validas]
+    lons_fac = lons_fac_todas[facilidades_validas]
+    indices = np.full(len(lats_loc), -1, dtype=int)
+    distancias = np.full(len(lats_loc), np.nan, dtype=float)
+    for i, (lat, lon) in enumerate(zip(lats_loc, lons_loc, strict=True)):
+        if not _coordenadas_validas_sonora(lat, lon):
+            continue
+        dist = distancia_haversine(lat, lon, lats_fac, lons_fac)
+        if not np.isfinite(dist).any():
+            continue
+        indice_valido = int(np.nanargmin(dist))
+        indices[i] = indices_facilidades[indice_valido]
+        distancias[i] = float(dist[indice_valido])
+    return indices, distancias
+
+
+def _establecimientos_por_nivel(salud: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Selecciona únicamente registros CLUES explícitos de cada nivel."""
+    salud_validas = salud.copy()
+    salud_validas["latitud"] = pd.to_numeric(salud_validas["latitud"], errors="coerce")
+    salud_validas["longitud"] = pd.to_numeric(salud_validas["longitud"], errors="coerce")
+    salud_validas = salud_validas.dropna(subset=["clues"])
+    coordenadas_validas = _coordenadas_validas_sonora(
+        salud_validas["latitud"].to_numpy(dtype=float),
+        salud_validas["longitud"].to_numpy(dtype=float),
+    )
+    salud_validas = salud_validas.loc[coordenadas_validas]
+    niveles = salud_validas["nivel_atencion"].astype("string").str.strip().str.upper()
+    primer_nivel = salud_validas[niveles.eq("PRIMER NIVEL")].reset_index(drop=True)
+    segundo_nivel = salud_validas[niveles.eq("SEGUNDO NIVEL")].reset_index(drop=True)
+    if primer_nivel.empty:
+        raise ValueError("CLUES no contiene establecimientos válidos de primer nivel.")
+    if segundo_nivel.empty:
+        raise ValueError("CLUES no contiene establecimientos válidos de segundo nivel.")
+    return primer_nivel, segundo_nivel
+
+
+def _rutas_sakbe(
+    pop: pd.DataFrame,
+    primer_nivel: pd.DataFrame,
+    segundo_nivel: pd.DataFrame,
+    candidatos_1: np.ndarray,
+    candidatos_2: np.ndarray,
+    cliente: ClienteRuteo,
+) -> pd.DataFrame:
+    """Calcula las dos rutas de cada localidad y conserva estados independientes."""
+    n = len(pop)
+    dist_1 = np.full(n, np.nan)
+    tiempo_1 = np.full(n, np.nan)
+    dist_2 = np.full(n, np.nan)
+    tiempo_2 = np.full(n, np.nan)
+    estado_1 = np.full(n, "pending", dtype=object)
+    estado_2 = np.full(n, "pending", dtype=object)
+    agotada = False
+
+    for i, fila in enumerate(pop.itertuples(index=False)):
+        lat = float(fila.latitud)
+        lon = float(fila.longitud)
+        if not _coordenadas_validas_sonora(lat, lon):
+            estado_1[i] = estado_2[i] = "invalid_coordinates"
+            continue
+        for establecimientos, candidatos, distancias, tiempos, estados in (
+            (primer_nivel, candidatos_1, dist_1, tiempo_1, estado_1),
+            (segundo_nivel, candidatos_2, dist_2, tiempo_2, estado_2),
+        ):
+            if agotada:
+                estados[i] = "quota_exceeded"
+                continue
+            indice = int(candidatos[i])
+            if indice < 0:
+                estados[i] = "invalid_coordinates"
+                continue
+            destino = establecimientos.iloc[indice]
+            try:
+                resultado = cliente.calcular_ruta(
+                    (lat, lon),
+                    (float(destino["latitud"]), float(destino["longitud"])),
+                )
+            except SakbeQuotaExceeded:
+                agotada = True
+                estados[i] = "quota_exceeded"
+                log.warning(
+                    "Cuota diaria SAKBÉ alcanzada; se conserva el avance y "
+                    "las rutas restantes quedan pendientes."
+                )
+                continue
+            except SakbeFatalError:
+                raise
+            except SakbeError as exc:
+                estados[i] = "api_error"
+                log.error("Falló ruteo SAKBÉ para localidad %s: %s", fila.cvegeo, exc)
+                continue
+            if resultado is None:
+                estados[i] = "no_route"
+                continue
+            distancias[i] = resultado.distance_km
+            tiempos[i] = resultado.time_min
+            estados[i] = "sakbe_ok"
+
+    estados_globales = []
+    for p, s in zip(estado_1, estado_2, strict=True):
+        if p == s == "sakbe_ok":
+            estados_globales.append("sakbe_ok")
+        elif p == "sakbe_ok" or s == "sakbe_ok":
+            estados_globales.append("partial")
+        elif "quota_exceeded" in (p, s):
+            estados_globales.append("quota_exceeded")
+        elif "api_error" in (p, s):
+            estados_globales.append("api_error")
+        else:
+            estados_globales.append("no_route")
+    return pd.DataFrame(
+        {
+            "primary_distance_km": dist_1,
+            "primary_time_min": tiempo_1,
+            "primary_routing_status": estado_1,
+            "secondary_distance_km": dist_2,
+            "secondary_time_min": tiempo_2,
+            "secondary_routing_status": estado_2,
+            "routing_status": estados_globales,
+        }
+    )
+
+
+def consolidar_dataset_final(
+    *,
+    metodo: str = "estimated",
+    cliente_sakbe: SakbeClient | None = None,
+) -> pd.DataFrame:
     """Cruza ITER, CLUES y CONEVAL para generar la tabla final de accesibilidad."""
     ensure_directories()
+    if metodo not in {"estimated", "sakbe"}:
+        raise ValueError("El método de ruteo debe ser 'estimated' o 'sakbe'.")
 
     if not ARCHIVO_POP.exists():
         raise FileNotFoundError(f"Falta el archivo procesado de ITER: {ARCHIVO_POP}")
@@ -129,42 +294,55 @@ def consolidar_dataset_final() -> pd.DataFrame:
         else pd.DataFrame()
     )
 
-    # Filtrar clínicas con coordenadas válidas
-    salud_validas = salud.dropna(subset=["latitud", "longitud"]).copy()
-    salud_validas["latitud"] = pd.to_numeric(salud_validas["latitud"], errors="coerce")
-    salud_validas["longitud"] = pd.to_numeric(salud_validas["longitud"], errors="coerce")
-    salud_validas = salud_validas.dropna(subset=["latitud", "longitud"])
+    pop = pop.copy()
+    pop["latitud"] = pd.to_numeric(pop["latitud"], errors="coerce")
+    pop["longitud"] = pd.to_numeric(pop["longitud"], errors="coerce")
+    primer_nivel, segundo_nivel = _establecimientos_por_nivel(salud)
+    lats_loc = pop["latitud"].to_numpy(dtype=float)
+    lons_loc = pop["longitud"].to_numpy(dtype=float)
+    clues_1, dist_1, time_1 = emparejar_mas_cercano(
+        lats_loc, lons_loc, primer_nivel
+    )
+    clues_2, dist_2, time_2 = emparejar_mas_cercano(
+        lats_loc, lons_loc, segundo_nivel
+    )
+    estado_1 = np.where(np.isfinite(time_1), "estimated", "invalid_coordinates")
+    estado_2 = np.where(np.isfinite(time_2), "estimated", "invalid_coordinates")
+    estado_global = np.where(
+        (estado_1 == "estimated") & (estado_2 == "estimated"),
+        "estimated",
+        "no_route",
+    )
 
-    # Separar por nivel de atención
-    primer_nivel = salud_validas[
-        salud_validas["nivel_atencion"].str.contains("PRIMER", na=False)
-        | salud_validas["tipo_establecimiento"].str.contains("CONSULTA EXTERNA", na=False)
-    ].copy()
-
-    segundo_nivel = salud_validas[
-        salud_validas["nivel_atencion"].str.contains("SEGUNDO|TERCER", na=False)
-        | salud_validas["tipo_establecimiento"].str.contains("HOSPITALIZACION", na=False)
-    ].copy()
-
-    if primer_nivel.empty:
-        primer_nivel = salud_validas.copy()
-    if segundo_nivel.empty:
-        segundo_nivel = salud_validas.copy()
-
-    # Localidades con coordenadas
-    lats_loc = pop["latitud"].to_numpy()
-    lons_loc = pop["longitud"].to_numpy()
-
-    # 1. Emparejar Primer Nivel
-    clues_1, dist_1, time_1 = emparejar_mas_cercano(lats_loc, lons_loc, primer_nivel)
-
-    # 2. Emparejar Segundo Nivel
-    clues_2, dist_2, time_2 = emparejar_mas_cercano(lats_loc, lons_loc, segundo_nivel)
-
-    # En caso de que el 2do nivel resulte numéricamente menor que el 1er nivel
-    # (p. ej. si un hospital general está en la misma manzana y el centro de salud unos metros más allá),
-    # el 1er nivel toma el tiempo menor ya que el hospital también brinda atención médica básica
-    t1_ajustado = np.minimum(time_1, time_2)
+    if metodo == "sakbe":
+        cfg = cargar_configuracion()
+        fuente = cfg.fuente("INEGI-ROUTE-001")
+        propio_cliente = cliente_sakbe is None
+        cliente = cliente_sakbe or crear_cliente_desde_entorno(
+            ARCHIVO_CACHE_SAKBE,
+            fuente.limite_diario or cfg.umbrales.sakbe_limite_diario,
+            fuente.api_base.rstrip("/"),
+            fuente.token_env,
+        )
+        try:
+            rutas = _rutas_sakbe(
+                pop,
+                primer_nivel,
+                segundo_nivel,
+                _candidatos_geodesicos(lats_loc, lons_loc, primer_nivel)[0],
+                _candidatos_geodesicos(lats_loc, lons_loc, segundo_nivel)[0],
+                cliente,
+            )
+        finally:
+            if propio_cliente:
+                cliente.cerrar()
+        dist_1 = rutas["primary_distance_km"].to_numpy()
+        time_1 = rutas["primary_time_min"].to_numpy()
+        estado_1 = rutas["primary_routing_status"].to_numpy()
+        dist_2 = rutas["secondary_distance_km"].to_numpy()
+        time_2 = rutas["secondary_time_min"].to_numpy()
+        estado_2 = rutas["secondary_routing_status"].to_numpy()
+        estado_global = rutas["routing_status"].to_numpy()
 
     df_final = pd.DataFrame(
         {
@@ -174,13 +352,17 @@ def consolidar_dataset_final() -> pd.DataFrame:
             "population": pd.to_numeric(pop["poblacion_total"], errors="coerce").fillna(0).astype(int),
             "latitude": pop["latitud"],
             "longitude": pop["longitud"],
-            "nearest_primary_clues": clues_1,
+            "primary_candidate_clues": clues_1,
             "primary_distance_km": dist_1,
-            "primary_time_min": t1_ajustado,
-            "nearest_secondary_clues": clues_2,
+            "primary_time_min": time_1,
+            "primary_routing_status": estado_1,
+            "secondary_candidate_clues": clues_2,
             "secondary_distance_km": dist_2,
             "secondary_time_min": time_2,
-            "routing_status": "ok",
+            "secondary_routing_status": estado_2,
+            "routing_method": metodo,
+            "facility_selection_method": "nearest_geodesic",
+            "routing_status": estado_global,
         }
     )
 
@@ -214,18 +396,27 @@ def consolidar_dataset_final() -> pd.DataFrame:
     return df_final
 
 
-def main() -> None:
+def main(metodo: str = "estimated") -> None:
     """Punto de entrada de ejecución del ruteo."""
-    print("Iniciando cálculo de ruteo y emparejamiento con centros de salud...")
-    df = consolidar_dataset_final()
-    print(f"Localidades procesadas con ruteo: {len(df)}")
-    print(f"Tiempo promedio al 1er nivel: {df['primary_time_min'].mean():.1f} min")
-    print(f"Tiempo promedio al 2do nivel: {df['secondary_time_min'].mean():.1f} min")
+    print(f"Iniciando accesibilidad a centros de salud (método: {metodo})...")
+    df = consolidar_dataset_final(metodo=metodo)
+    print(f"Localidades procesadas: {len(df)}")
+    print(f"Método registrado: {metodo}")
     print(
-        f"Localidades a > 60 min de 1er nivel: {(df['primary_time_min'] > 60).sum()}"
+        "Tiempo promedio al 1er nivel: "
+        f"{df['primary_time_min'].mean():.1f} min"
     )
     print(
-        f"Localidades a > 120 min de 2do nivel: {(df['secondary_time_min'] > 120).sum()}"
+        "Tiempo promedio al 2do nivel: "
+        f"{df['secondary_time_min'].mean():.1f} min"
+    )
+    print(
+        "Localidades a > 60 min de 1er nivel: "
+        f"{int(df['primary_time_min'].gt(60).sum())}"
+    )
+    print(
+        "Localidades a > 120 min de 2do nivel: "
+        f"{int(df['secondary_time_min'].gt(120).sum())}"
     )
     print(f"Tabla guardada en: {ARCHIVO_TABLA_FINAL}")
 

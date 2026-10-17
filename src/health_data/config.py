@@ -33,6 +33,7 @@ DIR_GEO = PROCESSED_DATA_DIR / "geografia"
 ARCHIVO_FUENTES = DIR_CONFIG / "fuentes_health.yaml"
 ARCHIVO_MANIFIESTO = PROCESSED_DATA_DIR / "manifiesto.json"
 ARCHIVO_TABLA_FINAL = PROCESSED_DATA_DIR / "accesibilidad_localidades.parquet"
+ARCHIVO_CACHE_SAKBE = INTERIM_DATA_DIR / "sakbe.sqlite3"
 
 # Claves geográficas de la entidad de interés
 CLAVE_SONORA = "26"

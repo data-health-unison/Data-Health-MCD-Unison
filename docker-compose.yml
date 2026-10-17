@@ -19,6 +19,7 @@ services:
       PYTHONPATH: /project/src
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      SAKBE_TOKEN: ${SAKBE_TOKEN:-}
 
     command:
       - streamlit

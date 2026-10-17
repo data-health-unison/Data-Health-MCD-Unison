@@ -47,7 +47,7 @@ fuentes:
   INEGI-ROUTE-001:
     dataset_id: "INEGI-ROUTE-001"
     nombre: "SAKBÉ - API de Ruteo Red Carretera INEGI"
-    api_base: "https://www.inegi.org.mx/servicios/Ruteo/v3.1/"
+    api_base: "https://gaia.inegi.org.mx/sakbe_v3.1/"
     token_env: "SAKBE_TOKEN"
     limite_diario: 2500
     estado: "approved"
