@@ -260,7 +260,7 @@ def test_sin_ruta_se_cachea(tmp_path) -> None:
     with _cliente(tmp_path, sesion) as cliente:
         for _ in range(2):
             with pytest.raises(SakbeSinRuta):
-                cliente.buscar_linea(29.0, -110.9, escala=10_000)
+                cliente.buscar_linea(29.0, -110.9, escala=50_000)
     assert len(sesion.llamadas) == 1
 
 
@@ -280,4 +280,4 @@ def test_amplia_escala_si_no_hay_tramo(tmp_path) -> None:
         linea = cliente.buscar_linea(27.9178, -110.9089)
         cliente.buscar_linea(27.9178, -110.9089)
     assert linea.id_routing_net == 10
-    assert [d["escala"] for _, d in sesion.llamadas] == [10_000, 50_000]
+    assert [d["escala"] for _, d in sesion.llamadas] == [50_000, 250_000]

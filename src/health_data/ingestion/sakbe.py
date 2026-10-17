@@ -53,8 +53,9 @@ ARCHIVO_CACHE = INTERIM_DATA_DIR / "sakbe_cache.sqlite"
 LIMITE_DIARIO = 2500
 REINTENTOS = 3
 TIMEOUT_SEG = 30
-#Si no hay tramo a una escala, se amplía la búsqueda a la siguiente (cada intento se cachea)
-ESCALAS_BUSQUEDA = (10_000, 50_000, 250_000, 1_000_000)
+#Si no hay tramo a una escala, se amplía la búsqueda a la siguiente (cada intento se cachea).
+#Con 10 000 fallaba ~87 % de los puntos de Sonora, por lo que se empieza en 50 000.
+ESCALAS_BUSQUEDA = (50_000, 250_000, 1_000_000)
 DECIMALES_COORD = 5  # ~1 m; evita fallos de caché por ruido de punto flotante
 
 TIPOS_RUTA = ("optima", "libre", "cuota")
@@ -87,6 +88,10 @@ class SakbeSinRuta(SakbeError):
 
 class SakbeConexionError(SakbeError):
     """Fallo de red o del servidor tras agotar los reintentos."""
+
+
+class SakbeNoEnCache(SakbeError):
+    """En modo ``solo_cache`` la consulta no está en caché (no se llama a la API)."""
 
 
 #--------------------------------------------------------------------------
@@ -330,11 +335,22 @@ class ClienteSakbe:
         timeout: float = TIMEOUT_SEG,
         reintentos: int = REINTENTOS,
         espera_base: float = 2.0,
+        solo_cache: bool = False,
     ) -> None:
         url_config, limite_config = _parametros_por_omision()
         if isinstance(tokens, str):
             tokens = [tokens]
-        self._tokens = list(dict.fromkeys(tokens)) if tokens else obtener_tokens()
+        # En modo solo_cache no se llama a la API, así que los tokens son opcionales
+        self.solo_cache = solo_cache
+        if tokens:
+            self._tokens = list(dict.fromkeys(tokens))
+        elif solo_cache:
+            try:
+                self._tokens = obtener_tokens()
+            except SakbeTokenError:
+                self._tokens = []
+        else:
+            self._tokens = obtener_tokens()
         self._huellas = [huella_token(t) for t in self._tokens]
         self._rechazados: set[str] = set()
         self.url_base = (url_base or url_config).rstrip("/") + "/"
@@ -416,6 +432,8 @@ class ClienteSakbe:
                 raise SakbeSinRuta(respuesta.get("message", "Sin resultado (caché)"))
             return respuesta, consultado_en, True
 
+        if self.solo_cache:
+            raise SakbeNoEnCache(f"{endpoint} no está en caché (modo solo_cache).")
         cuerpo = self._post(endpoint, parametros)
         consultado_en = datetime.now().isoformat(timespec="seconds")
 

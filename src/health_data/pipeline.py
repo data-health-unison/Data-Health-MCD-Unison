@@ -29,6 +29,7 @@ from health_data.config import (
 )
 from health_data.ingestion.descarga import descargar_dataset
 from health_data.processing import cartografia
+from health_data.validacion import ReporteValidacion, validar_archivo_procesado
 
 log = logging.getLogger("health_data.pipeline")
 
@@ -81,8 +82,49 @@ def paso_descargas(*, forzar: bool = False) -> dict[str, object]:
     return resultados
 
 
+def paso_ruteo() -> None:
+    """Recalcula la tabla final usando solo rutas SAKBÉ en caché (no gasta cuota).
+
+    Se ejecuta siempre para incorporar las rutas obtenidas con ``make rutas``.
+    """
+    log.info("=== Paso: Ruteo a establecimientos de salud ===")
+    try:
+        from health_data.processing.ruteo import main as proc_ruteo
+
+        print("Ejecutando cálculo de ruteo de salud...")
+        proc_ruteo()
+    except Exception as exc:
+        log.warning("No se pudo ejecutar ruteo: %s", exc)
+
+
+def paso_validacion(ruta: Path | None = None) -> ReporteValidacion | None:
+    """Valida la tabla final; devuelve el reporte o None si la tabla no existe."""
+    archivo = ruta or ARCHIVO_TABLA_FINAL
+    if not archivo.exists():
+        log.warning("No existe la tabla final %s; se omite la validación.", archivo)
+        return None
+
+    log.info("=== Paso: Validación de calidad ===")
+    print("Ejecutando validación de calidad del dataset final...")
+    reporte = validar_archivo_procesado(archivo)
+    if reporte.paso:
+        print(f"Validación: {len(reporte.comprobaciones)} comprobaciones superadas.")
+    else:
+        log.warning(
+            "Validación: %d de %d comprobaciones fallidas (%s).",
+            len(reporte.fallidas),
+            len(reporte.comprobaciones),
+            ", ".join(c.nombre for c in reporte.fallidas),
+        )
+    return reporte
+
+
 def guardar_manifiesto(
-    segundos: float, descargas: dict[str, object], args: dict[str, object]
+    segundos: float,
+    descargas: dict[str, object],
+    args: dict[str, object],
+    *,
+    validacion: ReporteValidacion | None = None,
 ) -> Path:
     """Genera el manifiesto de trazabilidad de la ejecución del pipeline."""
     manifiesto = {
@@ -101,6 +143,15 @@ def guardar_manifiesto(
             "tabla_final": str(ARCHIVO_TABLA_FINAL.relative_to(PROJECT_ROOT))
             if ARCHIVO_TABLA_FINAL.exists()
             else None,
+        },
+        "validacion": None
+        if validacion is None
+        else {
+            "paso": validacion.paso,
+            "comprobaciones": len(validacion.comprobaciones),
+            "fallidas": [
+                {"nombre": c.nombre, "detalle": c.detalle} for c in validacion.fallidas
+            ],
         },
     }
 
@@ -169,28 +220,15 @@ def run_pipeline(*, forzar: bool = False, solo_descarga: bool = False) -> None:
             log.warning("No se pudo ejecutar salud_001: %s", exc)
 
     # 3.4 Ruteo y Accesibilidad a Centros de Salud
-    if archivo_iter_proc.exists() and archivo_salud_proc.exists() and (forzar or not ARCHIVO_TABLA_FINAL.exists()):
-        try:
-            from health_data.processing.ruteo import main as proc_ruteo
-            print("Ejecutando cálculo de ruteo de salud...")
-            proc_ruteo()
-        except Exception as exc:
-            log.warning("No se pudo ejecutar ruteo: %s", exc)
+    if archivo_iter_proc.exists() and archivo_salud_proc.exists():
+        paso_ruteo()
 
     # 3.5 Validación de calidad
-    if ARCHIVO_TABLA_FINAL.exists():
-        try:
-            from health_data.validacion import ejecutar_todas
-            print("Ejecutando validación de calidad del dataset final...")
-            reporte = ejecutar_todas()
-            if not reporte.todas_pasan:
-                log.warning("Advertencia: Se detectaron inconsistencias en la validación.")
-        except Exception as exc:
-            log.warning("No se pudo ejecutar validacion: %s", exc)
+    reporte = paso_validacion()
 
     # 4. Guardar manifiesto de ejecución
     segundos = time.monotonic() - inicio
-    guardar_manifiesto(segundos, descargas, {"forzar": forzar})
+    guardar_manifiesto(segundos, descargas, {"forzar": forzar}, validacion=reporte)
     print(f"Pipeline ejecutado en {segundos:.2f} s.")
 
 
