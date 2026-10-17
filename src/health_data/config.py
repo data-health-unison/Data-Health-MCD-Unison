@@ -50,7 +50,7 @@ class Umbrales:
 
     tiempo_critico_min: int = 60
     tiempo_muy_critico_min: int = 120
-    tiempo_critico_segundo_nivel_min: int = 180
+    tiempo_critico_segundo_nivel_min: int = 120
     poblacion_min_localidad: int = 100
     sakbe_limite_diario: int = 2500
     cv_no_fiable: float = 0.25

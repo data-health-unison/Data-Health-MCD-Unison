@@ -144,6 +144,7 @@ routing_status
 - [x] Dataset consolidado por localidad.
 - [x] Cliente de la API SAKBÉ (token, caché, cuota y reintentos).
 - [x] Integración de SAKBÉ en el cálculo de ruteo (consultas en curso).
+- [x] Indicadores de accesibilidad y vulnerabilidad (`src/health_data/analisis.py` y `notebooks/2.0-dd-analisis-accesibilidad.ipynb`).
 - [ ] Validación de tiempos mediante rutas reales.
 
 ### API SAKBÉ
