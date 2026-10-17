@@ -143,7 +143,7 @@ routing_status
 - [x] Limpieza y validación de ITER, CONEVAL y CLUES.
 - [x] Dataset consolidado por localidad.
 - [x] Cliente de la API SAKBÉ (token, caché, cuota y reintentos).
-- [ ] Integración de SAKBÉ en el cálculo de ruteo.
+- [x] Integración de SAKBÉ en el cálculo de ruteo (consultas en curso).
 - [ ] Validación de tiempos mediante rutas reales.
 
 ### API SAKBÉ
@@ -168,12 +168,31 @@ docker compose run --rm app python -m health_data.ingestion.sakbe --probar  #rut
 
 ### Estado actual del ruteo
 
-El dataset consolidado disponible se genera asignando el establecimiento más
-cercano por distancia geodésica y estimando distancia y tiempo con un factor de
-sinuosidad y velocidades promedio por tramo. **El módulo aún no consulta la API
-SAKBÉ**; por ello, estos tiempos son aproximaciones exploratorias y no deben
-interpretarse como rutas o tiempos medidos en la red carretera. La integración
-con SAKBÉ y la validación de resultados siguen pendientes.
+Para cada localidad se eligen los **2 establecimientos más cercanos en línea
+recta** por nivel de atención y se mide con SAKBÉ la ruta real por carretera a
+cada uno; se conserva el de menor tiempo. Las localidades se procesan de mayor a
+menor población.
+
+```bash
+make rutas         # consulta SAKBÉ hasta agotar la cuota del día; reanudable
+make data          # reconstruye la tabla usando solo rutas en caché (sin gastar cuota)
+```
+
+Completar las ~7,300 localidades requiere unas 37,000 consultas (~5 días con 3
+tokens). Mientras tanto, las localidades sin ruta conservan la estimación por
+línea recta, factor de sinuosidad y velocidad promedio. La columna
+`routing_status` indica el origen de cada fila:
+
+| Valor | Significado |
+|---|---|
+| `ok` | Ambos niveles medidos con SAKBÉ |
+| `parcial` | Solo un nivel medido con SAKBÉ |
+| `sin_ruta` | SAKBÉ no encontró carretera o ruta; se usa la estimación |
+| `estimado` | Aún no consultada; se usa la estimación |
+
+`primary_method` y `secondary_method` indican `sakbe` o `estimado` por nivel, y
+`routing_consulted_at` la fecha de consulta. La validación
+`cobertura_ruteo_sakbe` exige al menos 70 % de localidades en `ok`.
 
 ## Alcance y limitaciones
 
