@@ -6,6 +6,7 @@ Rutas, fuentes y umbrales metodológicos de accesibilidad a servicios de salud.
 from __future__ import annotations
 
 import functools
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,20 @@ class Configuracion:
 # --------------------------------------------------------------------------
 # Funciones de carga y entorno
 # --------------------------------------------------------------------------
+
+
+def variable_de_entorno(nombre: str) -> str | None:
+    """Valor de una variable del entorno o, si no está, del archivo .env del proyecto."""
+    if os.environ.get(nombre):
+        return os.environ[nombre].strip()
+    archivo = PROJECT_ROOT / ".env"
+    if not archivo.exists():
+        return None
+    for linea in archivo.read_text(encoding="utf-8").splitlines():
+        clave, _, valor = linea.strip().partition("=")
+        if not linea.strip().startswith("#") and clave.removeprefix("export ").strip() == nombre:
+            return valor.strip().strip("'\"") or None
+    return None
 
 
 def ensure_directories() -> None:

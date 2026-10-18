@@ -107,3 +107,24 @@ def test_barras_de_analisis() -> None:
         }
     )
     assert len(barras_grupos_vulnerables(grupos).data[0].x) == 2
+
+
+def test_estilo_mapa_base(monkeypatch, tmp_path) -> None:
+    """Con CARTO_API_KEY se usa CARTO (con atribución); sin llave, OpenStreetMap."""
+    from health_data import config
+    from health_data.visualization.mapas import estilo_mapa_base
+
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)  # sin .env
+    monkeypatch.delenv("CARTO_API_KEY", raising=False)
+    assert estilo_mapa_base() == {"style": "open-street-map"}
+
+    monkeypatch.setenv("CARTO_API_KEY", "llave-de-prueba")
+    estilo = estilo_mapa_base()
+    capa = estilo["layers"][0]
+    assert estilo["style"] == "white-bg"
+    assert capa["source"][0].endswith("?key=llave-de-prueba")
+    assert "© CARTO" in capa["sourceattribution"]
+
+    monkeypatch.delenv("CARTO_API_KEY")
+    (tmp_path / ".env").write_text("CARTO_API_KEY='desde-env'\n", encoding="utf-8")
+    assert estilo_mapa_base()["layers"][0]["source"][0].endswith("?key=desde-env")
