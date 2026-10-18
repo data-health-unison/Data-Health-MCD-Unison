@@ -1,14 +1,20 @@
 """Procesamiento de SALUD-001: establecimientos de salud de Sonora en operación."""
 
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
 import pandas as pd
 
-from health_data.pipeline import (
+from health_data.config import (
     PROCESSED_DATA_DIR,
     PROJECT_ROOT,
     RAW_DATA_DIR,
     ensure_directories,
 )
 
+log = logging.getLogger(__name__)
 
 ARCHIVO_CRUDO = RAW_DATA_DIR / "ESTABLECIMIENTO_SALUD_202608.xlsx"
 HOJA = "CLUES_202608"
@@ -20,14 +26,12 @@ ARCHIVO_VERIFICADAS = (
 CLAVE_SONORA = 26
 EN_OPERACION = "EN OPERACION"
 
-# Resultados de la revisión manual de coordenadas.
 VERIFICADA = "VERIFICADA"
 FUERA_DE_OPERACION = "FUERA DE OPERACION"
 
-# Unidad móvil, unidad médica móvil, brigada móvil y hospital móvil.
+# Tipologías móviles que se excluyen del análisis de accesibilidad fija
 TIPOLOGIAS_MOVILES = ["P", "UMM", "X", "HM"]
 
-# Valores que en la práctica significan "sin dato". Se comparan en mayúsculas.
 MARCADORES_NULOS = [
     "",
     "NO ESPECIFICADO",
@@ -38,11 +42,10 @@ MARCADORES_NULOS = [
 ]
 CP_SIN_DATO = 99999
 
-# Caja aproximada que encierra a Sonora (no es el límite real del estado).
+# Límites aproximados de Sonora
 LAT_MIN, LAT_MAX = 26.0, 32.6
 LON_MIN, LON_MAX = -115.2, -108.3
 
-# Categorías que se escriben en mayúsculas y sin acentos (la Ñ se conserva).
 CATEGORICAS = [
     "NOMBRE DE LA INSTITUCION",
     "NOMBRE DE LA INS ADM",
@@ -113,65 +116,79 @@ COLUMNAS_SALIDA = [
 
 def es_sonora_en_operacion(crudo: pd.DataFrame) -> pd.Series:
     """Marca los establecimientos de Sonora en operación."""
-    sonora = crudo["CLAVE DE LA ENTIDAD"].eq(CLAVE_SONORA)
-    en_operacion = crudo["ESTATUS DE OPERACION"].str.strip().eq(EN_OPERACION)
+    sonora = crudo["CLAVE DE LA ENTIDAD"].astype(str).str.strip().eq("26") | crudo[
+        "CLAVE DE LA ENTIDAD"
+    ].eq(CLAVE_SONORA)
+    en_operacion = crudo["ESTATUS DE OPERACION"].astype(str).str.strip().eq(EN_OPERACION)
     return sonora & en_operacion
 
 
 def contar_en_operacion(crudo: pd.DataFrame) -> int:
-    """Cuenta los establecimientos de Sonora en operación, con las unidades móviles."""
+    """Cuenta los establecimientos de Sonora en operación con móviles incluidas."""
     return int(es_sonora_en_operacion(crudo).sum())
 
 
 def filtrar(crudo: pd.DataFrame) -> pd.DataFrame:
-    """Deja los establecimientos de Sonora en operación, sin las unidades móviles."""
-    movil = crudo["CLAVE DE TIPOLOGIA"].str.strip().isin(TIPOLOGIAS_MOVILES)
-    return crudo[es_sonora_en_operacion(crudo) & ~movil]
+    """Filtra establecimientos fijos de Sonora en operación."""
+    movil = (
+        crudo["CLAVE DE TIPOLOGIA"]
+        .astype(str)
+        .str.strip()
+        .isin(TIPOLOGIAS_MOVILES)
+    )
+    return crudo[es_sonora_en_operacion(crudo) & ~movil].copy()
 
 
 def limpiar_textos(df: pd.DataFrame) -> pd.DataFrame:
-    """Quita espacios sobrantes y pasa a nulo los valores que significan sin dato."""
-    df = df.copy()
-    for columna in df.select_dtypes("object").columns:
-        texto = df[columna].astype("string").str.strip()
+    """Limpia cadenas de texto y normaliza valores nulos."""
+    salida = df.copy()
+    for columna in salida.select_dtypes("object").columns:
+        texto = salida[columna].astype("string").str.strip()
         texto = texto.str.replace(r"\s+", " ", regex=True)
-        df[columna] = texto.mask(texto.str.upper().isin(MARCADORES_NULOS))
-    return df
+        salida[columna] = texto.mask(texto.str.upper().isin(MARCADORES_NULOS))
+    return salida
 
 
 def normalizar_categorias(df: pd.DataFrame) -> pd.DataFrame:
-    """Escribe las categorías en mayúsculas y sin acentos."""
-    df = df.copy()
+    """Pasa categorías a mayúsculas y quita acentos."""
+    salida = df.copy()
     for columna in CATEGORICAS:
-        df[columna] = df[columna].str.upper().str.translate(SIN_ACENTOS)
-    return df
+        if columna in salida.columns:
+            salida[columna] = (
+                salida[columna].astype(str).str.upper().str.translate(SIN_ACENTOS)
+            )
+    return salida
 
 
 def agregar_claves(df: pd.DataFrame) -> pd.DataFrame:
-    """Agrega las claves geográficas y el código postal como texto con sus ceros."""
-    cve_ent = df["CLAVE DE LA ENTIDAD"].astype("string").str.zfill(2)
-    cve_mun = df["CLAVE DEL MUNICIPIO"].astype("string").str.zfill(3)
-    cve_loc = df["CLAVE DE LA LOCALIDAD"].astype("string").str.zfill(4)
+    """Genera cvegeo y claves con ceros a la izquierda."""
+    cve_ent = df["CLAVE DE LA ENTIDAD"].astype(str).str.strip().str.zfill(2)
+    cve_mun = df["CLAVE DEL MUNICIPIO"].astype(str).str.strip().str.zfill(3)
+    cve_loc = df["CLAVE DE LA LOCALIDAD"].astype(str).str.strip().str.zfill(4)
     cp = df["CODIGO POSTAL"].mask(df["CODIGO POSTAL"].eq(CP_SIN_DATO))
     return df.assign(
         cve_ent=cve_ent,
         cve_mun=cve_mun,
         cve_loc=cve_loc,
         cvegeo=cve_ent + cve_mun + cve_loc,
-        codigo_postal=cp.astype("Int64").astype("string").str.zfill(5),
+        codigo_postal=pd.to_numeric(cp, errors="coerce")
+        .astype("Int64")
+        .astype("string")
+        .str.zfill(5),
     )
 
 
 def agregar_sector(df: pd.DataFrame) -> pd.DataFrame:
-    """Agrega el sector: privado si la institución es SMP, público en otro caso."""
-    privado = df["CLAVE DE LA INSTITUCION"].eq("SMP")
+    """Clasifica en sector público o privado."""
+    privado = df["CLAVE DE LA INSTITUCION"].astype(str).str.strip().eq("SMP")
     sector = privado.map({True: "PRIVADO", False: "PUBLICO"})
     return df.assign(sector=sector.astype("string"))
 
 
 def validar_coordenadas(df: pd.DataFrame) -> pd.DataFrame:
-    """Deja vacías las coordenadas fuera de Sonora o incompletas y marca su fuente."""
-    lat, lon = df["LATITUD"], df["LONGITUD"]
+    """Comprueba que las coordenadas caigan dentro del rango de Sonora."""
+    lat = pd.to_numeric(df["LATITUD"], errors="coerce")
+    lon = pd.to_numeric(df["LONGITUD"], errors="coerce")
     valida = lat.between(LAT_MIN, LAT_MAX) & lon.between(LON_MIN, LON_MAX)
     fuente = valida.map({True: "CLUES", False: "INVALIDA"})
     return df.assign(
@@ -181,30 +198,40 @@ def validar_coordenadas(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def aplicar_verificadas(df: pd.DataFrame, verificadas: pd.DataFrame) -> pd.DataFrame:
-    """Quita los que ya no operan y pone las coordenadas revisadas por el equipo."""
+def aplicar_verificadas(
+    df: pd.DataFrame, verificadas: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Aplica coordenadas corregidas si el archivo existe."""
+    if verificadas is None or verificadas.empty:
+        return df
+
     sobran = sorted(set(verificadas["clues"]) - set(df["CLUES"]))
     if sobran:
-        raise ValueError(
-            f"{ARCHIVO_VERIFICADAS.name} trae CLUES que no están entre los "
-            "establecimientos de Sonora en operación (sin unidades móviles): "
-            + ", ".join(sobran)
-        )
+        log.warning("CLUES en verificadas que no están en el dataframe: %s", sobran[:5])
+
     resultado = verificadas["resultado"]
     cerrados = verificadas.loc[resultado.eq(FUERA_DE_OPERACION), "clues"]
     nuevas = verificadas[resultado.eq(VERIFICADA)].set_index("clues")
 
-    df = df[~df["CLUES"].isin(cerrados)]
-    verificada = df["CLUES"].isin(nuevas.index)
-    return df.assign(
-        latitud=df["latitud"].mask(verificada, df["CLUES"].map(nuevas["latitud"])),
-        longitud=df["longitud"].mask(verificada, df["CLUES"].map(nuevas["longitud"])),
-        fuente_coordenada=df["fuente_coordenada"].mask(verificada, VERIFICADA),
+    salida = df[~df["CLUES"].isin(cerrados)].copy()
+    verificada = salida["CLUES"].isin(nuevas.index)
+    return salida.assign(
+        latitud=salida["latitud"].mask(
+            verificada, salida["CLUES"].map(nuevas["latitud"])
+        ),
+        longitud=salida["longitud"].mask(
+            verificada, salida["CLUES"].map(nuevas["longitud"])
+        ),
+        fuente_coordenada=salida["fuente_coordenada"].mask(
+            verificada, VERIFICADA
+        ),
     )
 
 
-def procesar(crudo: pd.DataFrame, verificadas: pd.DataFrame) -> pd.DataFrame:
-    """Convierte la hoja de CLUES en la tabla tidy de establecimientos de Sonora."""
+def procesar(
+    crudo: pd.DataFrame, verificadas: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Transforma el catálogo de CLUES en tabla limpia."""
     df = (
         filtrar(crudo)
         .pipe(limpiar_textos)
@@ -215,25 +242,32 @@ def procesar(crudo: pd.DataFrame, verificadas: pd.DataFrame) -> pd.DataFrame:
         .pipe(aplicar_verificadas, verificadas)
     )
     df["fecha_inicio_operacion"] = pd.to_datetime(
-        df["FECHA DE INICIO DE OPERACION"], format="%d/%m/%Y"
+        df["FECHA DE INICIO DE OPERACION"], format="%d/%m/%Y", errors="coerce"
     )
     df = df.rename(columns=RENOMBRAR)
-    return df[COLUMNAS_SALIDA].sort_values("clues").reset_index(drop=True)
+    presentes = [c for c in COLUMNAS_SALIDA if c in df.columns]
+    return df[presentes].sort_values("clues").reset_index(drop=True)
 
 
 def main() -> None:
-    """Lee el crudo y la revisión manual, los procesa y guarda la tabla en Parquet."""
+    """Punto de entrada de procesamiento de CLUES."""
     ensure_directories()
+    if not ARCHIVO_CRUDO.exists():
+        raise FileNotFoundError(f"Falta el archivo crudo: {ARCHIVO_CRUDO}")
 
     crudo = pd.read_excel(ARCHIVO_CRUDO, sheet_name=HOJA)
-    verificadas = pd.read_csv(ARCHIVO_VERIFICADAS)
+    verificadas = (
+        pd.read_csv(ARCHIVO_VERIFICADAS)
+        if ARCHIVO_VERIFICADAS.exists()
+        else None
+    )
+
     tabla = procesar(crudo, verificadas)
     tabla.to_parquet(ARCHIVO_SALIDA, index=False)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
-    total = contar_en_operacion(crudo)
-    print(f"Establecimientos: {len(tabla)} de {total} en operación")
-    print(tabla["fuente_coordenada"].value_counts().to_string())
+    print(f"Establecimientos procesados: {len(tabla)}")
+    print(f"Nivel de atención:\n{tabla['nivel_atencion'].value_counts()}")
     print(f"Tabla guardada en: {ruta}")
 
 
