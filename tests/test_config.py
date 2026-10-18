@@ -23,3 +23,10 @@ def test_cargar_configuracion() -> None:
     assert "CONEVAL-ACC-001" in cfg.fuentes
     fuente = cfg.fuente("CONEVAL-ACC-001")
     assert fuente.estado == "approved"
+
+
+def test_localidades_excluidas() -> None:
+    """Las localidades de la Isla del Tiburón están excluidas, cada una con su motivo."""
+    excluidas = cargar_configuracion().localidades_excluidas
+    assert set(excluidas) == {"260302192", "260303379", "260303436"}
+    assert all("Isla del Tiburón" in motivo for motivo in excluidas.values())

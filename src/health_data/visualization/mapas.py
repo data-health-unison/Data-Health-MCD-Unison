@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from health_data import config
 from health_data.processing.cartografia import poner_clave_cvegeo
 
 # Paleta cromática institucional de Sonora y salud
@@ -23,7 +24,30 @@ COLOR_ADECUADO = "#2E7D32"  # Verde (< 60 min)
 SECUENCIA_MAPA = "RdYlGn_r"  # Invertido: rojo = alto tiempo (peor), verde = bajo tiempo (mejor)
 PLANTILLA = "plotly_white"
 
+# Mapa base de CARTO (Positron). Desde 2025 CARTO exige llave; sin ella devuelve mosaicos con
+# "API KEY REQUIRED". La llave va en CARTO_API_KEY (.env); sin llave se usa OpenStreetMap.
+URL_MOSAICOS_CARTO = "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+ATRIBUCION_CARTO = "© OpenStreetMap contributors, © CARTO"
+
 MENSAJE_SIN_DATOS = "No hay datos suficientes para mostrar esta visualización."
+
+
+def estilo_mapa_base() -> dict:
+    """Estilo de ``layout.mapbox`` con el mapa base de CARTO si hay llave, o de OpenStreetMap si no."""
+    llave = config.variable_de_entorno("CARTO_API_KEY")
+    if not llave:
+        return {"style": "open-street-map"}
+    return {
+        "style": "white-bg",
+        "layers": [
+            {
+                "below": "traces",
+                "sourcetype": "raster",
+                "sourceattribution": ATRIBUCION_CARTO,
+                "source": [f"{URL_MOSAICOS_CARTO}?key={llave}"],
+            }
+        ],
+    }
 
 
 def _figura_vacia(mensaje: str = MENSAJE_SIN_DATOS) -> go.Figure:
@@ -179,7 +203,7 @@ def mapa_localidades(
         if columna_metodo and columna_metodo in datos.columns:
             datos["_origen"] = (
                 datos[columna_metodo]
-                .map({"sakbe": "medido con SAKBÉ", "estimado": "estimado"})
+                .map({"sakbe": "medido con SAKBÉ", "coneval": "asignado con CONEVAL", "estimado": "estimado"})
                 .fillna("estimado")
             )
             columnas_hover.append("_origen")
@@ -213,7 +237,7 @@ def mapa_localidades(
         title=titulo,
         height=620,
         mapbox=dict(
-            style="carto-positron",
+            **estilo_mapa_base(),
             zoom=5.8,
             center=dict(lat=lat_centro, lon=lon_centro),
         ),

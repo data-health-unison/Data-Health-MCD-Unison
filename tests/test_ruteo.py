@@ -161,3 +161,106 @@ def test_estado_ruteo() -> None:
     ok, sin, pen = ResultadoRuta("ok"), ResultadoRuta("sin_ruta"), ResultadoRuta("pendiente")
     estados = estado_ruteo([ok, ok, sin, pen], [ok, pen, pen, pen])
     assert estados.tolist() == ["ok", "parcial", "sin_ruta", "estimado"]
+
+
+def test_mismo_origen_destino_es_trayecto_local() -> None:
+    """SAKBÉ rechaza tramos distintos que comparten nodo; se toma como trayecto local, no sin ruta."""
+
+    class ClienteMismoNodo(ClienteFalso):
+        def calcular_ruta(self, origen, destino):
+            raise SakbeSinRuta("El Origen y el Destino NO deben ser el mismo")
+
+    cliente = ClienteMismoNodo()
+    r = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.001, -111.0)])
+    assert r.estado == "ok" and r.clues == "A"
+    assert r.tiempo_min == 3.0  # ~0.1 km: queda en el mínimo
+
+
+def test_caida_temporal_de_sakbe_espera_y_reintenta(monkeypatch) -> None:
+    """Un timeout prolongado no detiene la corrida: se espera y se reintenta."""
+    from health_data.ingestion.sakbe import SakbeConexionError
+    from health_data.processing import ruteo
+
+    monkeypatch.setattr(ruteo, "ESPERAS_CAIDA_SEG", (0, 0))
+
+    class ClienteIntermitente(ClienteFalso):
+        fallas = 2
+
+        def calcular_ruta(self, origen, destino):
+            if self.fallas:
+                self.fallas -= 1
+                raise SakbeConexionError("timeout")
+            return super().calcular_ruta(origen, destino)
+
+    cliente = ClienteIntermitente()
+    r = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)])
+    assert r.estado == "ok" and cliente.solo_cache is False
+
+    # Si la caída persiste tras todas las esperas, se pausan las consultas
+    cliente = ClienteIntermitente()
+    cliente.fallas = 99
+    r = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)])
+    assert r.estado == "pendiente" and cliente.solo_cache is True
+
+
+def test_imputar_con_coneval() -> None:
+    """Sin ruta SAKBÉ: mediana de su municipio y categoría CONEVAL; si el grupo es chico, la estatal."""
+    from health_data.processing.ruteo import imputar_con_coneval
+
+    def fila(mun, cat, estado, t1, t2, m1="sakbe", m2="sakbe"):
+        return {
+            "municipality_name": mun, "tiempo_centro_servicios": cat, "routing_status": estado,
+            "primary_time_min": t1, "primary_distance_km": t1 / 2, "primary_method": m1,
+            "secondary_time_min": t2, "secondary_distance_km": t2 / 2, "secondary_method": m2,
+        }
+
+    filas = [fila("A", "3 A 4 HRS.", "ok", 30 + i, 170 + i) for i in range(5)]  # grupo municipal de 5
+    filas += [fila("B", "3 A 4 HRS.", "ok", 50, 200)]  # B tiene solo 1: se usa la estatal
+    filas += [
+        fila("A", "3 A 4 HRS.", "sin_ruta", 10, 60, "estimado", "estimado"),
+        fila("B", "3 A 4 HRS.", "sin_ruta", 10, 60, "estimado", "estimado"),
+        fila("A", "3 A 4 HRS.", "parcial", 5, 60, "sakbe", "estimado"),  # solo falta el 2do nivel
+        fila("A", None, "sin_ruta", 10, 60, "estimado", "estimado"),  # sin dato CONEVAL: no cambia
+        fila("A", "3 A 4 HRS.", "estimado", 10, 60, "estimado", "estimado"),  # aún no consultada: no cambia
+    ]
+    r = imputar_con_coneval(pd.DataFrame(filas), minimo=5)
+
+    a, b, parcial, sin_dato, pendiente = (r.iloc[i] for i in range(6, 11))
+    # Medianas del municipio A; el 1er nivel incluye el medido de la localidad parcial (5)
+    assert (a.primary_time_min, a.secondary_time_min) == (31.5, 172.0)
+    assert (a.primary_method, a.secondary_method) == ("coneval", "coneval")
+    assert a.secondary_distance_km == 86.0
+    assert (b.primary_time_min, b.secondary_time_min) == (32.0, 172.5)  # medianas estatales de la categoría
+    assert (parcial.primary_time_min, parcial.primary_method) == (5, "sakbe")  # lo medido no se toca
+    assert (parcial.secondary_time_min, parcial.secondary_method) == (172.0, "coneval")
+    assert (sin_dato.secondary_time_min, sin_dato.secondary_method) == (60, "estimado")
+    assert (pendiente.secondary_time_min, pendiente.secondary_method) == (60, "estimado")
+
+
+def test_imputar_respeta_que_el_1er_nivel_no_supere_al_2do() -> None:
+    from health_data.processing.ruteo import imputar_con_coneval
+
+    base = pd.DataFrame(
+        [
+            {"municipality_name": "A", "tiempo_centro_servicios": "1 A 2 HRS.", "routing_status": "ok",
+             "primary_time_min": 90.0, "primary_distance_km": 1.0, "primary_method": "sakbe",
+             "secondary_time_min": 200.0, "secondary_distance_km": 1.0, "secondary_method": "sakbe"},
+            {"municipality_name": "A", "tiempo_centro_servicios": "1 A 2 HRS.", "routing_status": "parcial",
+             "primary_time_min": 10.0, "primary_distance_km": 1.0, "primary_method": "estimado",
+             "secondary_time_min": 40.0, "secondary_distance_km": 1.0, "secondary_method": "sakbe"},
+        ]
+    )
+    r = imputar_con_coneval(base, minimo=1)
+    # Mediana del 1er nivel = 90, pero el hospital medido está a 40: queda en 40
+    assert r.iloc[1].primary_time_min == 40.0
+
+
+def test_excluir_localidades() -> None:
+    from health_data.processing.ruteo import excluir_localidades
+
+    pop = pd.DataFrame(
+        {"cvegeo": ["260010001", "260302192"], "localidad": ["Aconchi", "Punta Tormenta"], "poblacion_total": [1650, 3]}
+    )
+    r = excluir_localidades(pop, {"260302192": "isla"})
+    assert r["cvegeo"].tolist() == ["260010001"]
+    assert excluir_localidades(pop, {}).equals(pop)

@@ -6,6 +6,7 @@ Rutas, fuentes y umbrales metodológicos de accesibilidad a servicios de salud.
 from __future__ import annotations
 
 import functools
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -77,6 +78,8 @@ class Configuracion:
 
     fuentes: dict[str, FuenteInfo]
     umbrales: Umbrales = field(default_factory=Umbrales)
+    # cvegeo de 9 dígitos → motivo; se quitan antes del ruteo y del análisis
+    localidades_excluidas: dict[str, str] = field(default_factory=dict)
 
     def fuente(self, dataset_id: str) -> FuenteInfo:
         """Devuelve la información de una fuente o lanza KeyError descriptivo."""
@@ -92,6 +95,20 @@ class Configuracion:
 # --------------------------------------------------------------------------
 # Funciones de carga y entorno
 # --------------------------------------------------------------------------
+
+
+def variable_de_entorno(nombre: str) -> str | None:
+    """Valor de una variable del entorno o, si no está, del archivo .env del proyecto."""
+    if os.environ.get(nombre):
+        return os.environ[nombre].strip()
+    archivo = PROJECT_ROOT / ".env"
+    if not archivo.exists():
+        return None
+    for linea in archivo.read_text(encoding="utf-8").splitlines():
+        clave, _, valor = linea.strip().partition("=")
+        if not linea.strip().startswith("#") and clave.removeprefix("export ").strip() == nombre:
+            return valor.strip().strip("'\"") or None
+    return None
 
 
 def ensure_directories() -> None:
@@ -137,4 +154,10 @@ def cargar_configuracion(ruta: Path | None = None) -> Configuracion:
             limite_diario=f.get("limite_diario"),
         )
 
-    return Configuracion(fuentes=fuentes, umbrales=umbrales)
+    excluidas = {
+        str(e["cvegeo"]).zfill(9): str(e.get("motivo", ""))
+        for e in (datos.get("localidades_excluidas") or [])
+        if e.get("cvegeo")
+    }
+
+    return Configuracion(fuentes=fuentes, umbrales=umbrales, localidades_excluidas=excluidas)

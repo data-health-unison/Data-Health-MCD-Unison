@@ -214,7 +214,7 @@ def tabla_legible(datos: pd.DataFrame, columnas: list[str]) -> pd.DataFrame:
     salida = datos[presentes].rename(columns=ETIQUETAS)
     for col in salida.columns:
         if col.startswith("Origen"):
-            salida[col] = salida[col].map({"sakbe": "SAKBÉ", "estimado": "Estimado"}).fillna(salida[col])
+            salida[col] = salida[col].map({"sakbe": "SAKBÉ", "coneval": "CONEVAL", "estimado": "Estimado"}).fillna(salida[col])
     return salida
 
 
@@ -437,7 +437,8 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     1. Para cada localidad se eligen los **2 establecimientos operativos más cercanos en línea recta** por nivel de atención.
     2. Con la **API de Ruteo SAKBÉ de INEGI** se mide la ruta por carretera hacia cada uno y se conserva la de menor tiempo.
     3. Si la clínica queda sobre el mismo tramo carretero que la localidad, el traslado se considera local (mínimo 3 min).
-    4. Las localidades aún no consultadas o sin ruta usan una **estimación**: distancia en línea recta × 1.28 de sinuosidad y velocidades promedio por tipo de trayecto.
+    4. **Sin carretera cercana** (SAKBÉ no encuentra ruta): se asigna el tiempo típico medido con SAKBÉ en las localidades del **mismo municipio y con el mismo grado de aislamiento de CONEVAL** (tiempo al centro de servicios). Si hay menos de 5 localidades así en el municipio, se usa la de todo el estado. Comparado con las rutas reales, acierta si la localidad supera el umbral en ~91 % (hospital) y ~84 % (centro de salud) de los casos en zonas alejadas.
+    5. Las localidades aún no consultadas usan una **estimación**: distancia en línea recta × 1.28 de sinuosidad y velocidades promedio. En zonas alejadas subestima el tiempo real, por lo que solo es provisional.
 
     Las rutas se consultan de la localidad más poblada a la menos poblada, por lo que la población cubierta avanza más rápido que el número de localidades.
 
@@ -445,8 +446,10 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     |---|---|
     | `ok` | Ambos niveles medidos con SAKBÉ |
     | `parcial` | Solo un nivel medido con SAKBÉ |
-    | `sin_ruta` | SAKBÉ no encontró carretera o ruta; se usa la estimación |
+    | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL (paso 4) |
     | `estimado` | Aún no consultada; se usa la estimación |
+
+    La columna *Origen* de las tablas indica, por nivel, si el tiempo viene de **SAKBÉ**, de **CONEVAL** o de la **estimación**.
 
     ### Umbrales del proyecto
     - **1er nivel:** más de {u.tiempo_critico_min} min a un centro de salud.
@@ -465,6 +468,10 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     - Capacidad o saturación de camas hospitalarias, ni disponibilidad de medicamentos o insumos.
     - Horarios ni frecuencias del transporte público; para quien no tiene vehículo el tiempo real es mayor.
     - Las variables de vulnerabilidad de las localidades confidenciales de ITER.
+
+    Se excluyen 3 localidades de la **Isla del Tiburón** (16 habitantes en total): no tienen acceso por carretera
+    y, por su tamaño, parecen campamentos de pesca más que localidades permanentes. La lista y el motivo están en
+    `config/fuentes_health.yaml` (`localidades_excluidas`).
     """
     )
 

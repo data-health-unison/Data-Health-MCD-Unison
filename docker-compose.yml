@@ -21,6 +21,7 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       SAKBE_TOKENS: ${SAKBE_TOKENS:-}
       SAKBE_TOKEN: ${SAKBE_TOKEN:-}
+      CARTO_API_KEY: ${CARTO_API_KEY:-}
 
     command:
       - streamlit
