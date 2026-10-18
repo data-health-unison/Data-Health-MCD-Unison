@@ -38,6 +38,7 @@ class RespuestaFalsa:
         self._cuerpo = cuerpo
         self.status_code = status_code
         self.text = str(cuerpo)
+        self.content = self.text.encode()
 
     def json(self) -> dict:
         if self._cuerpo is None:
@@ -281,3 +282,59 @@ def test_amplia_escala_si_no_hay_tramo(tmp_path) -> None:
         cliente.buscar_linea(27.9178, -110.9089)
     assert linea.id_routing_net == 10
     assert [d["escala"] for _, d in sesion.llamadas] == [50_000, 250_000]
+
+
+def test_respuesta_vacia_persistente_se_cachea_como_sin_ruta(tmp_path) -> None:
+    """SAKBÉ responde vacío para algunos pares: se reintenta y, si persiste, queda como sin resultado."""
+    sesion = SesionFalsa({"optima": [RespuestaVacia()]})
+    with _cliente(tmp_path, sesion, reintentos=2) as cliente:
+        linea = sakbe.Linea(1, 2, 3)
+        otra = sakbe.Linea(4, 5, 6)
+        for _ in range(2):
+            with pytest.raises(SakbeSinRuta):
+                cliente.calcular_ruta(linea, otra)
+    assert len(sesion.llamadas) == 2  # 2 intentos la primera vez; la segunda sale de caché
+
+
+def test_respuesta_vacia_transitoria(tmp_path) -> None:
+    sesion = SesionFalsa({"buscalinea": [RespuestaVacia(), RespuestaFalsa(LINEA_OK)]})
+    with _cliente(tmp_path, sesion) as cliente:
+        assert cliente.buscar_linea(29.0, -110.9).id_routing_net == 10
+
+
+class RespuestaVacia(RespuestaFalsa):
+    def __init__(self) -> None:
+        super().__init__(None, 200)
+        self.content = b""
+
+
+def test_limite_real_del_servidor_por_encima_del_documentado(tmp_path, monkeypatch) -> None:
+    """Por encima del límite documentado, un error desconocido es el límite real: no se cachea y se rota."""
+    monkeypatch.setattr(sakbe, "LIMITE_DOCUMENTADO", 1)
+    rechazo = {"response": {"success": False, "message": "Mensaje nuevo de SAKBÉ"}}
+    sesion = SesionFalsa(
+        {"buscalinea": [RespuestaFalsa(LINEA_OK), RespuestaFalsa(rechazo), RespuestaFalsa(LINEA_OK)]}
+    )
+    cliente = ClienteSakbe(
+        ["tok-a", "tok-b"], url_base="https://ejemplo/sakbe/", ruta_cache=tmp_path / "c.sqlite",
+        sesion=sesion, espera_base=0, limite_diario=100,
+    )
+    with cliente:
+        cliente.buscar_linea(29.0, -110.9)  # tok-a, consulta 1 (dentro del documentado)
+        linea = cliente.buscar_linea(28.0, -110.0)  # tok-a rechazado en la 2 → tok-b
+        limites = cliente.cache._con.execute("select aceptadas, mensaje from limites_detectados").fetchall()
+        guardadas = cliente.cache._con.execute("select count(*) from respuestas where exito=0").fetchone()[0]
+    assert linea.id_routing_net == 10
+    assert [d["key"] for _, d in sesion.llamadas] == ["tok-a", "tok-a", "tok-b"]
+    assert limites == [(1, "Mensaje nuevo de SAKBÉ")]
+    assert guardadas == 0
+
+
+def test_sin_resultado_conocido_no_es_limite(tmp_path, monkeypatch) -> None:
+    """Un "no se encontró línea" por encima del documentado sigue siendo un resultado legítimo."""
+    monkeypatch.setattr(sakbe, "LIMITE_DOCUMENTADO", 0)
+    sin_linea = {"response": {"success": False, "message": "No se encontró línea de red en las coordenadas enviadas"}}
+    sesion = SesionFalsa({"buscalinea": [RespuestaFalsa(sin_linea)]})
+    with _cliente(tmp_path, sesion, limite_diario=100) as cliente:
+        with pytest.raises(SakbeSinRuta):
+            cliente.buscar_linea(29.0, -110.9, escala=50_000)

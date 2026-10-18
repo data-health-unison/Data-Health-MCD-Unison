@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -54,6 +55,8 @@ CANDIDATOS_POR_NIVEL = 2
 TIEMPO_MINIMO_MIN = 3.0
 #Velocidad urbana cuando origen y destino quedan sobre el mismo tramo carretero
 VELOCIDAD_MISMA_VIA_KMH = 35.0
+# Respaldo CONEVAL: localidades ruteadas mínimas en un municipio y categoría para usar su mediana
+MINIMO_GRUPO_CONEVAL = 5
 
 #Variables de ITER que se pasan a la tabla final para el análisis de vulnerabilidad
 COLUMNAS_VULNERABILIDAD = [
@@ -70,6 +73,10 @@ COLUMNAS_VULNERABILIDAD = [
     "viviendas_sin_auto_ni_moto",
     "pct_viviendas_sin_auto_ni_moto",
 ]
+
+# Ante una caída de SAKBÉ (timeouts tras los reintentos del cliente) se espera y se vuelve a
+# intentar antes de detener las consultas: el servicio se vuelve lento por momentos.
+ESPERAS_CAIDA_SEG = (60, 180, 300)
 
 ESTADO_OK = "ok"
 ESTADO_SIN_RUTA = "sin_ruta"
@@ -197,6 +204,29 @@ def _pausar_consultas(cliente: ClienteSakbe, motivo: str) -> None:
         cliente.solo_cache = True
 
 
+def _llamar(cliente: ClienteSakbe, metodo, *args):
+    """Llama al cliente; si SAKBÉ no responde, espera y reintenta antes de rendirse."""
+    for espera in (*ESPERAS_CAIDA_SEG, None):
+        try:
+            return metodo(*args)
+        except SakbeConexionError as exc:
+            if espera is None or cliente.solo_cache:
+                raise
+            log.warning("SAKBÉ no responde (%s). Nuevo intento en %d s.", exc, espera)
+            time.sleep(espera)
+
+
+def _trayecto_local(lat: float, lon: float, lat_f: float, lon_f: float) -> tuple[float, float, str]:
+    """Distancia y tiempo de un trayecto local (sin ruta SAKBÉ): línea recta a velocidad urbana."""
+    distancia = float(distancia_haversine(lat, lon, lat_f, lon_f))
+    return distancia, distancia / VELOCIDAD_MISMA_VIA_KMH * 60.0, ""
+
+
+def _es_mismo_origen_destino(exc: SakbeSinRuta) -> bool:
+    """SAKBÉ responde "El Origen y el Destino NO deben ser el mismo" cuando los tramos comparten nodo."""
+    return "mismo" in str(exc).lower()
+
+
 def mejor_ruta_sakbe(
     cliente: ClienteSakbe,
     lat: float,
@@ -209,7 +239,7 @@ def mejor_ruta_sakbe(
     red o modo solo caché): se completará en una ejecución posterior.
     """
     try:
-        origen = cliente.buscar_linea(lat, lon)
+        origen = _llamar(cliente, cliente.buscar_linea, lat, lon)
     except SakbeSinRuta:
         return ResultadoRuta(ESTADO_SIN_RUTA)
     except SakbeCuotaAgotada as exc:
@@ -225,17 +255,18 @@ def mejor_ruta_sakbe(
     pendiente = False
     for clues, lat_f, lon_f in candidatos:
         try:
-            destino = cliente.buscar_linea(lat_f, lon_f)
+            destino = _llamar(cliente, cliente.buscar_linea, lat_f, lon_f)
             if destino.id_routing_net == origen.id_routing_net:
                 #SAKBÉ no calcula rutas dentro de un mismo tramo: trayecto local
-                distancia = float(distancia_haversine(lat, lon, lat_f, lon_f))
-                tiempo = distancia / VELOCIDAD_MISMA_VIA_KMH * 60.0
-                consultado_en = ""
+                distancia, tiempo, consultado_en = _trayecto_local(lat, lon, lat_f, lon_f)
             else:
-                ruta = cliente.calcular_ruta(origen, destino)
+                ruta = _llamar(cliente, cliente.calcular_ruta, origen, destino)
                 distancia, tiempo, consultado_en = ruta.long_km, ruta.tiempo_min, ruta.consultado_en
-        except SakbeSinRuta:
-            continue
+        except SakbeSinRuta as exc:
+            if not _es_mismo_origen_destino(exc):
+                continue
+            # Tramos distintos que SAKBÉ considera el mismo punto (comparten nodo): trayecto local
+            distancia, tiempo, consultado_en = _trayecto_local(lat, lon, lat_f, lon_f)
         except (SakbeCuotaAgotada, SakbeConexionError) as exc:
             _pausar_consultas(cliente, str(exc))
             pendiente = True
@@ -319,6 +350,56 @@ def _aplicar_rutas(
         if r.estado == ESTADO_OK:
             clues[i], distancia[i], tiempo[i], metodo[i] = r.clues, r.distancia_km, r.tiempo_min, "sakbe"
     return clues, distancia, tiempo, metodo
+
+
+def imputar_con_coneval(tabla: pd.DataFrame, minimo: int = MINIMO_GRUPO_CONEVAL) -> pd.DataFrame:
+    """Respaldo para los niveles sin ruta SAKBÉ en localidades ``sin_ruta`` o ``parcial``.
+
+    Asigna la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo
+    municipio y con la misma categoría de CONEVAL de tiempo al centro de servicios
+    (``tiempo_centro_servicios``). Si el municipio tiene menos de ``minimo`` localidades de esa
+    categoría, usa la mediana estatal de la categoría. El método del nivel pasa a ``coneval``.
+
+    Validado contra las rutas reales (excluyendo a cada localidad de su mediana): en localidades
+    a 2 km o más de carretera pavimentada acierta el lado del umbral en ~91 % (hospital) y ~84 %
+    (centro de salud), contra ~72 % de la estimación por línea recta, que subestima ~40 y ~17 min.
+    """
+    if "tiempo_centro_servicios" not in tabla.columns:
+        return tabla
+    t = tabla.copy()
+    categoria = t["tiempo_centro_servicios"].astype(object)
+    candidatas = t["routing_status"].isin([ESTADO_SIN_RUTA, "parcial"]) & categoria.notna()
+
+    for col_t, col_d, col_m in (
+        ("primary_time_min", "primary_distance_km", "primary_method"),
+        ("secondary_time_min", "secondary_distance_km", "secondary_method"),
+    ):
+        faltan = candidatas & t[col_m].ne("sakbe")
+        medidas = t[col_m].eq("sakbe") & categoria.notna()
+        if not faltan.any() or not medidas.any():
+            continue
+        t[col_t] = t[col_t].astype(float)
+        t[col_d] = t[col_d].astype(float)
+        base = t.loc[medidas, ["municipality_name", col_t, col_d]].assign(categoria=categoria[medidas])
+        por_mun = base.groupby(["municipality_name", "categoria"])[[col_t, col_d]].agg(["median", "size"])
+        por_mun = por_mun[por_mun[(col_t, "size")] >= minimo]
+        por_cat = base.groupby("categoria")[[col_t, col_d]].median()
+
+        for i in t.index[faltan]:
+            clave = (t.at[i, "municipality_name"], categoria[i])
+            if clave in por_mun.index:
+                tiempo, distancia = por_mun.at[clave, (col_t, "median")], por_mun.at[clave, (col_d, "median")]
+            elif categoria[i] in por_cat.index:
+                tiempo, distancia = por_cat.at[categoria[i], col_t], por_cat.at[categoria[i], col_d]
+            else:
+                continue
+            t.at[i, col_t] = round(float(tiempo), 1)
+            t.at[i, col_d] = round(float(distancia), 2)
+            t.at[i, col_m] = "coneval"
+
+    # Igual que en el ruteo: el 1er nivel no puede ser más lento que el hospital, que también da atención básica
+    t["primary_time_min"] = np.minimum(t["primary_time_min"], t["secondary_time_min"])
+    return t
 
 
 def estado_ruteo(r1: list[ResultadoRuta], r2: list[ResultadoRuta]) -> np.ndarray:
@@ -468,6 +549,8 @@ def consolidar_dataset_final(
         ]
         df_final = df_final.merge(coneval[cols_coneval], left_on="locality_id", right_on="cvegeo", how="left")
         df_final = df_final.drop(columns=["cvegeo"], errors="ignore")
+        # Respaldo para las localidades sin ruta SAKBÉ (sin carretera cercana)
+        df_final = imputar_con_coneval(df_final)
 
     #Nombres anteriores, conservados por compatibilidad
     if "pct_viviendas_sin_auto_ni_moto" in df_final.columns:
@@ -509,13 +592,20 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Limita el número de localidades a rutear (las de mayor población primero).",
     )
+    parser.add_argument(
+        "--limite-por-token",
+        type=int,
+        default=None,
+        help="Consultas diarias por token (por omisión, la configuración). Si SAKBÉ rechaza un token "
+        "antes, se registra el límite real y se pasa al siguiente.",
+    )
     args = parser.parse_args(argv if argv is not None else [])
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     cliente: ClienteSakbe | None = None
     if args.sakbe:
         try:
-            cliente = ClienteSakbe()
+            cliente = ClienteSakbe(limite_diario=args.limite_por_token)
         except SakbeTokenError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1

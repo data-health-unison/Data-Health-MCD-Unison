@@ -62,6 +62,11 @@ TIPOS_RUTA = ("optima", "libre", "cuota")
 VEHICULO_AUTOMOVIL = 1
 CODIGOS_TRANSITORIOS = {429, 500, 502, 503, 504}
 PALABRAS_ERROR_TOKEN = ("key", "llave", "token", "clave", "autoriz")
+RESPUESTA_VACIA = "respuesta vacía"
+# Límite por token que indica el catálogo. Por encima de él, un error no reconocido se toma
+# como límite real del servidor (no se guarda en caché) y se registra en limites_detectados.
+LIMITE_DOCUMENTADO = 2500
+MENSAJES_SIN_RESULTADO = ("no se encontró línea de red", "no deben ser el mismo", RESPUESTA_VACIA)
 PALABRAS_CUOTA_SERVIDOR = ("límite", "limite", "excedi", "cuota", "agotad")
 
 
@@ -194,6 +199,13 @@ class CacheSakbe:
                 consultas INTEGER NOT NULL,
                 PRIMARY KEY (fecha, token)
             );
+            CREATE TABLE IF NOT EXISTS limites_detectados (
+                momento TEXT NOT NULL,
+                token TEXT NOT NULL,
+                aceptadas INTEGER NOT NULL,
+                http INTEGER,
+                mensaje TEXT
+            );
             """
         )
         self._con.commit()
@@ -249,6 +261,14 @@ class CacheSakbe:
             ON CONFLICT(fecha, token) DO UPDATE SET consultas = consultas + 1
             """,
             ((dia or date.today()).isoformat(), huella),
+        )
+        self._con.commit()
+
+    def registrar_limite(self, huella: str, aceptadas: int, http: int, mensaje: str) -> None:
+        """Guarda cuántas consultas aceptó SAKBÉ a un token antes de rechazarlo."""
+        self._con.execute(
+            "INSERT INTO limites_detectados VALUES (?, ?, ?, ?, ?)",
+            (datetime.now().isoformat(timespec="seconds"), huella, aceptadas, http, mensaje),
         )
         self._con.commit()
 
@@ -418,6 +438,25 @@ class ClienteSakbe:
 
     #-- petición base ------------------------------------------------------
 
+    def _limite_del_servidor(self, huella: str, http: int, mensaje: str, *, http_error: bool = False) -> bool:
+        """True si el rechazo parece el límite real del servidor para este token.
+
+        Solo aplica por encima de LIMITE_DOCUMENTADO y si el error no es un "sin resultado" conocido.
+        Registra cuántas consultas aceptó el token y deja de usarlo por hoy.
+        """
+        if http_error and http not in (401, 403, 429):
+            return False
+        usadas = self.cache.consultas_del_dia(huella)
+        if usadas <= LIMITE_DOCUMENTADO or any(m in mensaje.lower() for m in MENSAJES_SIN_RESULTADO):
+            return False
+        log.warning(
+            "LÍMITE REAL: SAKBÉ rechazó el token %s tras %d consultas aceptadas hoy (HTTP %d): %s",
+            huella, usadas - 1, http, mensaje[:300],
+        )
+        self.cache.registrar_limite(huella, usadas - 1, http, mensaje[:1000])
+        self.cache.marcar_agotado(huella, self.limite_diario)
+        return True
+
     def _consultar(self, endpoint: str, parametros: dict[str, Any]) -> tuple[dict[str, Any], str, bool]:
         """Ejecuta una consulta con caché. Devuelve (data, consultado_en, desde_cache).
 
@@ -484,14 +523,22 @@ class ClienteSakbe:
                     )
                     self._rechazados.add(huella)
                     continue
+                if self._limite_del_servidor(huella, respuesta.status_code, respuesta.text, http_error=True):
+                    continue
                 if respuesta.status_code in CODIGOS_TRANSITORIOS:
                     ultimo_error = f"HTTP {respuesta.status_code}"
                 elif respuesta.status_code >= 400:
                     raise SakbeError(f"SAKBÉ respondió HTTP {respuesta.status_code} en {endpoint}.")
+                elif not respuesta.content.strip():
+                    # Para algunos pares origen-destino SAKBÉ responde siempre vacío; se reintenta
+                    # por si es transitorio y, si persiste, se trata como "sin resultado".
+                    ultimo_error = RESPUESTA_VACIA
                 else:
                     try:
                         cuerpo = respuesta.json()
                     except ValueError as exc:
+                        if self._limite_del_servidor(huella, respuesta.status_code, respuesta.text):
+                            continue
                         raise SakbeError(
                             f"SAKBÉ devolvió una respuesta no JSON en {endpoint}: "
                             f"{respuesta.text[:200]!r}"
@@ -499,6 +546,8 @@ class ClienteSakbe:
                     if not isinstance(cuerpo, dict):
                         raise SakbeError(f"Respuesta inesperada de SAKBÉ en {endpoint}.")
                     exito, mensaje = _exito(cuerpo)
+                    if not exito and self._limite_del_servidor(huella, respuesta.status_code, mensaje):
+                        continue
                     if not exito and _es_cuota_del_servidor(mensaje):
                         log.warning(
                             "Token SAKBÉ %s sin cuota en el servidor (%s); se usa el siguiente.",
@@ -523,6 +572,8 @@ class ClienteSakbe:
                 time.sleep(espera)
             intento += 1
 
+        if ultimo_error == RESPUESTA_VACIA:
+            return {"response": {"success": False, "message": f"SAKBÉ devolvió una {RESPUESTA_VACIA}"}}
         raise SakbeConexionError(
             f"SAKBÉ no respondió en {endpoint} tras {self.reintentos} intentos ({ultimo_error})."
         )

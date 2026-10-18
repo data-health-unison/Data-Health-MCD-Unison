@@ -179,7 +179,7 @@ def mapa_localidades(
         if columna_metodo and columna_metodo in datos.columns:
             datos["_origen"] = (
                 datos[columna_metodo]
-                .map({"sakbe": "medido con SAKBÉ", "estimado": "estimado"})
+                .map({"sakbe": "medido con SAKBÉ", "coneval": "asignado con CONEVAL", "estimado": "estimado"})
                 .fillna("estimado")
             )
             columnas_hover.append("_origen")

@@ -188,10 +188,17 @@ línea recta, factor de sinuosidad y velocidad promedio. La columna
 |---|---|
 | `ok` | Ambos niveles medidos con SAKBÉ |
 | `parcial` | Solo un nivel medido con SAKBÉ |
-| `sin_ruta` | SAKBÉ no encontró carretera o ruta; se usa la estimación |
+| `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
 | `estimado` | Aún no consultada; se usa la estimación |
 
-`primary_method` y `secondary_method` indican `sakbe` o `estimado` por nivel, y
+**Respaldo con CONEVAL.** A los niveles sin ruta SAKBÉ de las localidades `sin_ruta` y `parcial` se les
+asigna la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo municipio y con la
+misma categoría de tiempo al centro de servicios de CONEVAL (si son menos de 5, la mediana estatal de esa
+categoría). Validado contra las rutas reales excluyendo a cada localidad de su mediana: en localidades a 2 km
+o más de carretera pavimentada acierta el lado del umbral en ~91 % (hospital, 120 min) y ~84 % (centro de
+salud, 60 min), contra ~72 % de la estimación por línea recta, que subestima ~40 y ~17 min.
+
+`primary_method` y `secondary_method` indican `sakbe`, `coneval` o `estimado` por nivel, y
 `routing_consulted_at` la fecha de consulta. La validación
 `cobertura_ruteo_sakbe` exige al menos 70 % de localidades en `ok`.
 
