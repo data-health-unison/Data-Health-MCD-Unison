@@ -45,15 +45,31 @@ ARCHIVO_POP = PROCESSED_DATA_DIR / "inegi-pop-001_localidades.parquet"
 ARCHIVO_CONEVAL = PROCESSED_DATA_DIR / "coneval-acc-001_localidades.parquet"
 ARCHIVO_SALUD = PROCESSED_DATA_DIR / "salud-001_establecimientos.parquet"
 
-# Factor medio de sinuosidad carretera para el terreno de Sonora (relación red vial / línea recta)
+#Factor medio de sinuosidad carretera para el terreno de Sonora (relación red vial / línea recta)
 FACTOR_SINUOSIDAD = 1.28
 
-# Establecimientos más cercanos en línea recta que se miden con SAKBÉ por nivel
+#Establecimientos más cercanos en línea recta que se miden con SAKBÉ por nivel
 CANDIDATOS_POR_NIVEL = 2
-# Tiempo mínimo de traslado (clínica en la misma localidad)
+#Tiempo mínimo de traslado (clínica en la misma localidad)
 TIEMPO_MINIMO_MIN = 3.0
-# Velocidad urbana cuando origen y destino quedan sobre el mismo tramo carretero
+#Velocidad urbana cuando origen y destino quedan sobre el mismo tramo carretero
 VELOCIDAD_MISMA_VIA_KMH = 35.0
+
+#Variables de ITER que se pasan a la tabla final para el análisis de vulnerabilidad
+COLUMNAS_VULNERABILIDAD = [
+    "disponibilidad",
+    "poblacion_60_y_mas",
+    "pct_60_y_mas",
+    "poblacion_con_discapacidad",
+    "pct_con_discapacidad",
+    "poblacion_sin_afiliacion",
+    "pct_sin_afiliacion",
+    "poblacion_lengua_indigena",
+    "pct_lengua_indigena",
+    "viviendas_habitadas",
+    "viviendas_sin_auto_ni_moto",
+    "pct_viviendas_sin_auto_ni_moto",
+]
 
 ESTADO_OK = "ok"
 ESTADO_SIN_RUTA = "sin_ruta"
@@ -122,14 +138,14 @@ def emparejar_mas_cercano(
 
     clues_cercano = clues_f[indices_min]
 
-    # Distancia estimada por carretera aplicando factor de sinuosidad
+    #Distancia estimada por carretera aplicando factor de sinuosidad
     dist_carretera_km = dist_recta_km * FACTOR_SINUOSIDAD
 
-    # Tiempo en minutos según velocidad de perfil vial
+    #Tiempo en minutos según velocidad de perfil vial
     velocidades = estimar_velocidad_promedio(dist_carretera_km)
     tiempo_min = (dist_carretera_km / velocidades) * 60.0
 
-    # Mínimo 3 minutos de tiempo base si la clínica está en la misma localidad
+    #Mínimo 3 minutos de tiempo base si la clínica está en la misma localidad
     tiempo_min = np.maximum(tiempo_min, TIEMPO_MINIMO_MIN)
 
     return (
@@ -139,9 +155,9 @@ def emparejar_mas_cercano(
     )
 
 
-# --------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 # Ruteo con SAKBÉ
-# --------------------------------------------------------------------------
+#--------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -211,7 +227,7 @@ def mejor_ruta_sakbe(
         try:
             destino = cliente.buscar_linea(lat_f, lon_f)
             if destino.id_routing_net == origen.id_routing_net:
-                # SAKBÉ no calcula rutas dentro de un mismo tramo: trayecto local
+                #SAKBÉ no calcula rutas dentro de un mismo tramo: trayecto local
                 distancia = float(distancia_haversine(lat, lon, lat_f, lon_f))
                 tiempo = distancia / VELOCIDAD_MISMA_VIA_KMH * 60.0
                 consultado_en = ""
@@ -348,13 +364,13 @@ def consolidar_dataset_final(
         else pd.DataFrame()
     )
 
-    # Filtrar clínicas con coordenadas válidas
+    #Filtrar clínicas con coordenadas válidas
     salud_validas = salud.dropna(subset=["latitud", "longitud"]).copy()
     salud_validas["latitud"] = pd.to_numeric(salud_validas["latitud"], errors="coerce")
     salud_validas["longitud"] = pd.to_numeric(salud_validas["longitud"], errors="coerce")
     salud_validas = salud_validas.dropna(subset=["latitud", "longitud"])
 
-    # Separar por nivel de atención
+    #Separar por nivel de atención
     primer_nivel = salud_validas[
         salud_validas["nivel_atencion"].str.contains("PRIMER", na=False)
         | salud_validas["tipo_establecimiento"].str.contains("CONSULTA EXTERNA", na=False)
@@ -370,17 +386,17 @@ def consolidar_dataset_final(
     if segundo_nivel.empty:
         segundo_nivel = salud_validas.copy()
 
-    # Localidades con coordenadas
+    #Localidades con coordenadas
     lats_loc = pop["latitud"].to_numpy()
     lons_loc = pop["longitud"].to_numpy()
 
-    # 1. Emparejar Primer Nivel
+    #Emparejar Primer Nivel
     clues_1, dist_1, time_1 = emparejar_mas_cercano(lats_loc, lons_loc, primer_nivel)
 
-    # 2. Emparejar Segundo Nivel
+    #Emparejar Segundo Nivel
     clues_2, dist_2, time_2 = emparejar_mas_cercano(lats_loc, lons_loc, segundo_nivel)
 
-    # 3. Sustituir por rutas reales de SAKBÉ donde estén disponibles
+    #Sustituir por rutas reales de SAKBÉ donde estén disponibles
     metodo_1 = metodo_2 = np.full(len(pop), "estimado", dtype=object)
     estado = np.full(len(pop), "estimado", dtype=object)
     consultado_en = np.full(len(pop), "", dtype=object)
@@ -405,9 +421,9 @@ def consolidar_dataset_final(
             for a, b in zip(rutas["primer"], rutas["segundo"])
         )
 
-    # En caso de que el 2do nivel resulte numéricamente menor que el 1er nivel
-    # (p. ej. si un hospital general está en la misma manzana y el centro de salud unos metros más allá),
-    # el 1er nivel toma el tiempo menor ya que el hospital también brinda atención médica básica
+    #En caso de que el 2do nivel resulte numéricamente menor que el 1er nivel
+    #(p. ej. si un hospital general está en la misma manzana y el centro de salud unos metros más allá),
+    #el 1er nivel toma el tiempo menor ya que el hospital también brinda atención médica básica
     t1_ajustado = np.minimum(time_1, time_2)
 
     df_final = pd.DataFrame(
@@ -431,7 +447,13 @@ def consolidar_dataset_final(
         }
     )
 
-    # Pegar variables sociodemográficas y de CONEVAL si están disponibles
+    #Variables de vulnerabilidad de ITER (antes del merge para conservar la alineación por fila).
+    #En localidades confidenciales de ITER vienen vacías.
+    for col in COLUMNAS_VULNERABILIDAD:
+        if col in pop.columns:
+            df_final[col] = pop[col].to_numpy()
+
+    #Pegar variables de CONEVAL si están disponibles
     if not coneval.empty and "cvegeo" in coneval.columns:
         cols_coneval = [
             c
@@ -447,13 +469,14 @@ def consolidar_dataset_final(
         df_final = df_final.merge(coneval[cols_coneval], left_on="locality_id", right_on="cvegeo", how="left")
         df_final = df_final.drop(columns=["cvegeo"], errors="ignore")
 
-    if "pct_viviendas_sin_auto_ni_moto" in pop.columns:
-        df_final["pct_sin_auto"] = pop["pct_viviendas_sin_auto_ni_moto"]
-    if "poblacion_con_discapacidad" in pop.columns:
-        df_final["poblacion_discapacidad"] = pop["poblacion_con_discapacidad"]
+    #Nombres anteriores, conservados por compatibilidad
+    if "pct_viviendas_sin_auto_ni_moto" in df_final.columns:
+        df_final["pct_sin_auto"] = df_final["pct_viviendas_sin_auto_ni_moto"]
+    if "poblacion_con_discapacidad" in df_final.columns:
+        df_final["poblacion_discapacidad"] = df_final["poblacion_con_discapacidad"]
 
     df_final.to_parquet(ARCHIVO_TABLA_FINAL, index=False)
-    # Localidades a las que aún les falta consultar SAKBÉ en algún nivel
+    #Localidades a las que aún les falta consultar SAKBÉ en algún nivel
     df_final.attrs["localidades_pendientes"] = int(pendientes)
     log.info(
         "Dataset final consolidado en: %s (%s filas)",

@@ -5,7 +5,7 @@
 umbrales:
   tiempo_critico_min: 60           # > 60 min hacia 1er nivel: accesibilidad comprometida
   tiempo_muy_critico_min: 120      # > 120 min hacia 1er nivel: accesibilidad crítica
-  tiempo_critico_segundo_nivel_min: 180  # > 180 min hacia 2do nivel (hospital general)
+  tiempo_critico_segundo_nivel_min: 120  # > 120 min hacia 2do nivel (hospital); acordado por el equipo: la condición del paciente que requiere hospital hace crítico cada minuto
   poblacion_min_localidad: 100     # corte referencial de tamaño de localidad
   sakbe_limite_diario: 2500        # cuota diaria estimada de consultas API SAKBÉ
   cv_no_fiable: 0.25               # coeficiente de variación máximo aceptable
