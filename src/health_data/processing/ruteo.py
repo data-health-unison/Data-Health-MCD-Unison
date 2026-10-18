@@ -27,6 +27,7 @@ from health_data.config import (
     ARCHIVO_TABLA_FINAL,
     PROCESSED_DATA_DIR,
     PROJECT_ROOT,
+    cargar_configuracion,
     ensure_directories,
 )
 from health_data.ingestion.sakbe import (
@@ -352,6 +353,21 @@ def _aplicar_rutas(
     return clues, distancia, tiempo, metodo
 
 
+def excluir_localidades(pop: pd.DataFrame, excluidas: dict[str, str]) -> pd.DataFrame:
+    """Quita las localidades listadas en ``localidades_excluidas`` de la configuración."""
+    if not excluidas:
+        return pop
+    mascara = pop["cvegeo"].astype(str).isin(excluidas)
+    if mascara.any():
+        log.info(
+            "Se excluyen %d localidades (%d habitantes) según config/fuentes_health.yaml: %s",
+            int(mascara.sum()),
+            int(pd.to_numeric(pop.loc[mascara, "poblacion_total"], errors="coerce").fillna(0).sum()),
+            ", ".join(pop.loc[mascara, "localidad"].astype(str)),
+        )
+    return pop.loc[~mascara].reset_index(drop=True)
+
+
 def imputar_con_coneval(tabla: pd.DataFrame, minimo: int = MINIMO_GRUPO_CONEVAL) -> pd.DataFrame:
     """Respaldo para los niveles sin ruta SAKBÉ en localidades ``sin_ruta`` o ``parcial``.
 
@@ -436,7 +452,7 @@ def consolidar_dataset_final(
     if not ARCHIVO_SALUD.exists():
         raise FileNotFoundError(f"Falta el archivo de establecimientos: {ARCHIVO_SALUD}")
 
-    pop = pd.read_parquet(ARCHIVO_POP)
+    pop = excluir_localidades(pd.read_parquet(ARCHIVO_POP), cargar_configuracion().localidades_excluidas)
     salud = pd.read_parquet(ARCHIVO_SALUD)
 
     coneval = (

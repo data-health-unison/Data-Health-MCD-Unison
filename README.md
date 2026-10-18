@@ -191,6 +191,10 @@ línea recta, factor de sinuosidad y velocidad promedio. La columna
 | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
 | `estimado` | Aún no consultada; se usa la estimación |
 
+**Localidades excluidas.** Las 3 localidades de la Isla del Tiburón (16 habitantes) se excluyen del ruteo y
+del análisis: no tienen acceso por carretera y parecen campamentos de pesca, no localidades permanentes. La
+lista y el motivo están en `config/fuentes_health.yaml` (`localidades_excluidas`).
+
 **Respaldo con CONEVAL.** A los niveles sin ruta SAKBÉ de las localidades `sin_ruta` y `parcial` se les
 asigna la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo municipio y con la
 misma categoría de tiempo al centro de servicios de CONEVAL (si son menos de 5, la mediana estatal de esa

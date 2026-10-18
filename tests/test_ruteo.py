@@ -253,3 +253,14 @@ def test_imputar_respeta_que_el_1er_nivel_no_supere_al_2do() -> None:
     r = imputar_con_coneval(base, minimo=1)
     # Mediana del 1er nivel = 90, pero el hospital medido está a 40: queda en 40
     assert r.iloc[1].primary_time_min == 40.0
+
+
+def test_excluir_localidades() -> None:
+    from health_data.processing.ruteo import excluir_localidades
+
+    pop = pd.DataFrame(
+        {"cvegeo": ["260010001", "260302192"], "localidad": ["Aconchi", "Punta Tormenta"], "poblacion_total": [1650, 3]}
+    )
+    r = excluir_localidades(pop, {"260302192": "isla"})
+    assert r["cvegeo"].tolist() == ["260010001"]
+    assert excluir_localidades(pop, {}).equals(pop)

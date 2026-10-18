@@ -10,6 +10,19 @@ umbrales:
   sakbe_limite_diario: 2500        # cuota diaria estimada de consultas API SAKBÉ
   cv_no_fiable: 0.25               # coeficiente de variación máximo aceptable
 
+# Localidades que se excluyen del ruteo y del análisis (por cvegeo), con su motivo.
+# Para volver a incluir una, basta con quitarla de la lista y correr `make data`.
+localidades_excluidas:
+  - cvegeo: "260302192"
+    localidad: "Punta Tormenta (Isla del Tiburón)"
+    motivo: "Isla del Tiburón: sin acceso por carretera y 1–12 habitantes; probablemente campamentos de pesca, no localidades permanentes (decisión del equipo, 18/10/2026)"
+  - cvegeo: "260303379"
+    localidad: "Cruces (Isla del Tiburón)"
+    motivo: "Isla del Tiburón: sin acceso por carretera y 1–12 habitantes; probablemente campamentos de pesca, no localidades permanentes (decisión del equipo, 18/10/2026)"
+  - cvegeo: "260303436"
+    localidad: "Tecomate (Isla del Tiburón)"
+    motivo: "Isla del Tiburón: sin acceso por carretera y 1–12 habitantes; probablemente campamentos de pesca, no localidades permanentes (decisión del equipo, 18/10/2026)"
+
 # Fuentes de datos del proyecto
 fuentes:
   CONEVAL-ACC-001:

@@ -468,6 +468,10 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     - Capacidad o saturación de camas hospitalarias, ni disponibilidad de medicamentos o insumos.
     - Horarios ni frecuencias del transporte público; para quien no tiene vehículo el tiempo real es mayor.
     - Las variables de vulnerabilidad de las localidades confidenciales de ITER.
+
+    Se excluyen 3 localidades de la **Isla del Tiburón** (16 habitantes en total): no tienen acceso por carretera
+    y, por su tamaño, parecen campamentos de pesca más que localidades permanentes. La lista y el motivo están en
+    `config/fuentes_health.yaml` (`localidades_excluidas`).
     """
     )
 

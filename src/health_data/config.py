@@ -77,6 +77,8 @@ class Configuracion:
 
     fuentes: dict[str, FuenteInfo]
     umbrales: Umbrales = field(default_factory=Umbrales)
+    # cvegeo de 9 dígitos → motivo; se quitan antes del ruteo y del análisis
+    localidades_excluidas: dict[str, str] = field(default_factory=dict)
 
     def fuente(self, dataset_id: str) -> FuenteInfo:
         """Devuelve la información de una fuente o lanza KeyError descriptivo."""
@@ -137,4 +139,10 @@ def cargar_configuracion(ruta: Path | None = None) -> Configuracion:
             limite_diario=f.get("limite_diario"),
         )
 
-    return Configuracion(fuentes=fuentes, umbrales=umbrales)
+    excluidas = {
+        str(e["cvegeo"]).zfill(9): str(e.get("motivo", ""))
+        for e in (datos.get("localidades_excluidas") or [])
+        if e.get("cvegeo")
+    }
+
+    return Configuracion(fuentes=fuentes, umbrales=umbrales, localidades_excluidas=excluidas)
