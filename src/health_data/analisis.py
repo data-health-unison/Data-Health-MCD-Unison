@@ -231,6 +231,43 @@ def localidades_prioritarias(
     return resultado.head(n).reset_index(drop=True) if n else resultado.reset_index(drop=True)
 
 
+def grupos_vulnerables(
+    tabla: pd.DataFrame,
+    *,
+    umbral_primer: float | None = None,
+    umbral_segundo: float | None = None,
+    umbrales: Umbrales | None = None,
+) -> pd.DataFrame:
+    """Personas de cada grupo vulnerable con acceso comprometido frente al total del estado.
+
+    La primera fila es la población total, como referencia: un grupo con mayor
+    porcentaje que ella está sobrerrepresentado entre quienes tienen acceso comprometido.
+    """
+    t = preparar_tabla(tabla)
+    comp = acceso_comprometido(
+        t, umbral_primer=umbral_primer, umbral_segundo=umbral_segundo, umbrales=umbrales
+    )
+    filas = [("Población total", "population")] + [
+        (GRUPOS_VULNERABLES[c], c) for c in _grupos_presentes(t)
+    ]
+    resultado = pd.DataFrame(
+        [
+            {
+                "grupo": etiqueta,
+                "total_estado": int(t[col].sum()),
+                "con_acceso_comprometido": int(t.loc[comp, col].sum()),
+            }
+            for etiqueta, col in filas
+        ]
+    )
+    resultado["pct_comprometido"] = np.where(
+        resultado["total_estado"] > 0,
+        100 * resultado["con_acceso_comprometido"] / resultado["total_estado"].clip(lower=1),
+        0.0,
+    )
+    return resultado
+
+
 def resumen_estatal(
     tabla: pd.DataFrame,
     *,
@@ -260,6 +297,8 @@ def resumen_estatal(
         "localidades_comprometidas": int(comp.sum()),
         "poblacion_comprometida": int(t.loc[comp, "population"].sum()),
         "pct_poblacion_comprometida": pct(comp),
+        "tiempo_primer_ponderado": _promedio_ponderado(t["primary_time_min"], t["population"]),
+        "tiempo_segundo_ponderado": _promedio_ponderado(t["secondary_time_min"], t["population"]),
         "pct_localidades_sakbe": 100 * float(ok.mean()) if len(t) else 0.0,
         "pct_poblacion_sakbe": pct(ok),
         "pct_poblacion_con_datos_vulnerabilidad": pct(con_datos),

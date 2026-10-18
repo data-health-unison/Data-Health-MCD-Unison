@@ -50,3 +50,60 @@ def test_mapa_localidades() -> None:
     )
     fig = mapa_localidades(df)
     assert fig is not None
+
+
+def test_mapa_localidades_con_metodo() -> None:
+    """El tooltip indica si el tiempo fue medido con SAKBÉ o estimado."""
+    df = pd.DataFrame(
+        {
+            "locality_name": ["A", "B"],
+            "municipality_name": ["M", "M"],
+            "latitude": [29.0, 29.5],
+            "longitude": [-110.9, -110.5],
+            "population": [100, 5],
+            "primary_time_min": [10.0, 80.0],
+            "primary_method": ["sakbe", "estimado"],
+        }
+    )
+    fig = mapa_localidades(df, columna_metodo="primary_method")
+    assert list(fig.data[0].customdata[:, 3]) == ["medido con SAKBÉ", "estimado"]
+    assert "customdata[3]" in fig.data[0].hovertemplate
+
+
+def test_barras_de_analisis() -> None:
+    """Las gráficas del análisis se construyen con las salidas de analisis.py."""
+    from health_data.visualization.mapas import (
+        barras_grupos_vulnerables,
+        barras_municipios_comprometidos,
+        barras_poblacion_por_rango,
+    )
+
+    rangos = pd.DataFrame(
+        {"localidades": [3, 1], "poblacion": [900, 10], "pct_poblacion": [98.9, 1.1]},
+        index=["≤ 60 min", "> 60 min"],
+    )
+    assert len(barras_poblacion_por_rango({"1er nivel": rangos, "2do nivel": rangos}).data) == 2
+
+    resumen = pd.DataFrame(
+        {
+            "municipio": ["A", "B", "C"],
+            "poblacion_comprometida": [50, 20, 0],
+            "pct_poblacion_comprometida": [5.0, 40.0, 0.0],
+            "tiempo_segundo_ponderado": [130.0, 150.0, 20.0],
+        }
+    )
+    fig = barras_municipios_comprometidos(resumen)
+    assert list(fig.data[0].y) == ["B", "A"]  # sin el municipio en cero, el mayor arriba
+
+    sin_afectados = resumen.assign(poblacion_comprometida=0)
+    assert len(barras_municipios_comprometidos(sin_afectados).layout.annotations) == 1
+
+    grupos = pd.DataFrame(
+        {
+            "grupo": ["Población total", "60 años y más"],
+            "total_estado": [1000, 100],
+            "con_acceso_comprometido": [10, 2],
+            "pct_comprometido": [1.0, 2.0],
+        }
+    )
+    assert len(barras_grupos_vulnerables(grupos).data[0].x) == 2

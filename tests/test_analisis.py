@@ -113,3 +113,22 @@ def test_umbral_de_2do_nivel_del_proyecto() -> None:
     umbrales = cargar_configuracion().umbrales
     assert umbral_critico("segundo", umbrales) == 120
     assert cortes_por_nivel("segundo", umbrales) == [0, 60, 120, 180, np.inf]
+
+
+def test_grupos_vulnerables(tabla) -> None:
+    from health_data.analisis import grupos_vulnerables
+
+    r = grupos_vulnerables(tabla, umbrales=UMBRALES).set_index("grupo")
+    assert r.index[0] == "Población total"
+    assert r.loc["Población total", "con_acceso_comprometido"] == 253
+    # 60+: Rancho 10 + Sierra 40 (Confidencial sin dato) de 170 en el estado
+    assert r.loc["60 años y más", "con_acceso_comprometido"] == 50
+    assert r.loc["60 años y más", "pct_comprometido"] == pytest.approx(100 * 50 / 170)
+    # Sin vehículo estimada: Rancho 25 + Sierra 50
+    assert r.loc["Sin automóvil ni motocicleta (estimada)", "con_acceso_comprometido"] == 75
+
+
+def test_resumen_estatal_tiempos_ponderados(tabla) -> None:
+    r = resumen_estatal(tabla, umbrales=UMBRALES)
+    esperado = (1000 * 5 + 50 * 70 + 200 * 20 + 100 * 10 + 3 * 130) / 1353
+    assert r["tiempo_primer_ponderado"] == pytest.approx(esperado)

@@ -129,10 +129,12 @@ def mapa_localidades(
     titulo: str = "Accesibilidad geográfica de las localidades de Sonora",
     unidad: str = "minutos",
     max_puntos: int = 5000,
+    columna_metodo: str | None = None,
 ) -> go.Figure:
     """Mapa de puntos (Scattermapbox) para localidades individuales.
 
     Muestra cada localidad con color gradual según tiempo de traslado hacia la clínica más cercana.
+    Con ``columna_metodo`` (``sakbe``/``estimado``) el tooltip indica si el tiempo fue medido o estimado.
     """
     if (
         localidades is None
@@ -169,6 +171,21 @@ def mapa_localidades(
         np.sqrt(pd.to_numeric(poblacion, errors="coerce").fillna(10)) / 4, 4, 15
     )
 
+    columnas_hover = [col_nom, col_mun]
+    plantilla_hover = "<b>%{customdata[0]}</b> (%{customdata[1]})"
+    if columna in datos.columns:
+        columnas_hover.append(columna)
+        plantilla_hover += f"<br>{unidad}: %{{customdata[2]:,.1f}}"
+        if columna_metodo and columna_metodo in datos.columns:
+            datos["_origen"] = (
+                datos[columna_metodo]
+                .map({"sakbe": "medido con SAKBÉ", "estimado": "estimado"})
+                .fillna("estimado")
+            )
+            columnas_hover.append("_origen")
+            plantilla_hover += " (%{customdata[3]})"
+    plantilla_hover += "<extra></extra>"
+
     figura = go.Figure(
         go.Scattermapbox(
             lat=datos["latitude"],
@@ -182,15 +199,8 @@ def mapa_localidades(
                 colorbar=dict(title=unidad) if columna in datos.columns else None,
                 opacity=0.8,
             ),
-            customdata=datos[[col_nom, col_mun, columna]].to_numpy()
-            if columna in datos.columns
-            else datos[[col_nom, col_mun]].to_numpy(),
-            hovertemplate=(
-                "<b>%{customdata[0]}</b> (%{customdata[1]})<br>"
-                + f"{unidad}: %{{customdata[2]:,.1f}}<extra></extra>"
-                if columna in datos.columns
-                else "<b>%{customdata[0]}</b> (%{customdata[1]})<extra></extra>"
-            ),
+            customdata=datos[columnas_hover].to_numpy(),
+            hovertemplate=plantilla_hover,
         )
     )
 
@@ -311,5 +321,124 @@ def ranking_municipios(
         yaxis_title="",
         height=max(400, top_n * 28),
         margin=dict(t=60, b=40, l=120, r=20),
+    )
+    return figura
+
+
+def barras_poblacion_por_rango(
+    rangos: dict[str, pd.DataFrame],
+    *,
+    titulo: str = "Población por tiempo de traslado al establecimiento más cercano",
+) -> go.Figure:
+    """Barras agrupadas de población por rango de tiempo, una serie por nivel de atención.
+
+    ``rangos`` mapea el nombre del nivel a la salida de ``analisis.poblacion_por_rango``.
+    El eje vertical es logarítmico porque casi toda la población está en el primer rango.
+    """
+    if not rangos or all(r is None or r.empty for r in rangos.values()):
+        return _figura_vacia()
+
+    colores = [COLOR_NACIONAL, COLOR_SONORA, COLOR_REFERENCIA]
+    figura = go.Figure()
+    for (nombre, datos), color in zip(rangos.items(), colores):
+        figura.add_bar(
+            x=datos.index.astype(str),
+            y=datos["poblacion"],
+            name=nombre,
+            marker_color=color,
+            customdata=datos[["pct_poblacion", "localidades"]].to_numpy(),
+            hovertemplate="%{x}<br>%{y:,} personas (%{customdata[0]:.1f} %)"
+            "<br>%{customdata[1]:,} localidades<extra>" + nombre + "</extra>",
+        )
+    figura.update_layout(
+        template=PLANTILLA,
+        title=titulo,
+        xaxis_title="Tiempo de traslado",
+        yaxis_title="Personas (escala logarítmica)",
+        yaxis_type="log",
+        barmode="group",
+        height=420,
+        margin=dict(t=60, b=40, l=60, r=20),
+    )
+    return figura
+
+
+def barras_municipios_comprometidos(
+    resumen: pd.DataFrame,
+    *,
+    top_n: int = 15,
+    titulo: str = "Municipios con más población con acceso comprometido",
+) -> go.Figure:
+    """Barras horizontales de población con acceso comprometido por municipio.
+
+    Usa la salida de ``analisis.resumen_municipal``. El color indica qué porcentaje
+    del municipio representa esa población.
+    """
+    if resumen is None or resumen.empty or "poblacion_comprometida" not in resumen.columns:
+        return _figura_vacia()
+
+    datos = resumen[resumen["poblacion_comprometida"] > 0].head(top_n).iloc[::-1]
+    if datos.empty:
+        return _figura_vacia("Ningún municipio supera los umbrales seleccionados.")
+
+    figura = go.Figure(
+        go.Bar(
+            x=datos["poblacion_comprometida"],
+            y=datos["municipio"],
+            orientation="h",
+            marker=dict(
+                color=datos["pct_poblacion_comprometida"],
+                colorscale="OrRd",
+                colorbar=dict(title="% del<br>municipio"),
+            ),
+            customdata=datos[["pct_poblacion_comprometida", "tiempo_segundo_ponderado"]].to_numpy(),
+            hovertemplate="<b>%{y}</b><br>%{x:,} personas (%{customdata[0]:.1f} % del municipio)"
+            "<br>Tiempo promedio al 2do nivel: %{customdata[1]:.0f} min<extra></extra>",
+        )
+    )
+    figura.update_layout(
+        template=PLANTILLA,
+        title=titulo,
+        xaxis_title="Personas",
+        yaxis_title="",
+        height=max(400, len(datos) * 30 + 100),
+        margin=dict(t=60, b=40, l=120, r=20),
+    )
+    return figura
+
+
+def barras_grupos_vulnerables(
+    grupos: pd.DataFrame,
+    *,
+    titulo: str = "Porcentaje de cada grupo que vive con acceso comprometido",
+) -> go.Figure:
+    """Barras del porcentaje de cada grupo con acceso comprometido.
+
+    Usa la salida de ``analisis.grupos_vulnerables``; la primera fila (población
+    total) se dibuja en gris como referencia.
+    """
+    if grupos is None or grupos.empty:
+        return _figura_vacia()
+
+    colores = [COLOR_REFERENCIA] + [COLOR_SONORA] * (len(grupos) - 1)
+    figura = go.Figure(
+        go.Bar(
+            x=grupos["pct_comprometido"],
+            y=grupos["grupo"],
+            orientation="h",
+            marker_color=colores,
+            text=grupos["con_acceso_comprometido"].map("{:,} personas".format),
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate="<b>%{y}</b><br>%{x:.2f} % del grupo<extra></extra>",
+        )
+    )
+    figura.update_layout(
+        template=PLANTILLA,
+        title=titulo,
+        xaxis_title="% del grupo en el estado",
+        yaxis=dict(autorange="reversed"),
+        height=400,
+        margin=dict(t=60, b=40, l=260, r=120),
     )
     return figura
