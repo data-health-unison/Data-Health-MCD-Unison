@@ -1,20 +1,20 @@
-"""Procesamiento de INEGI-POP-001: localidades de Sonora del Censo 2020 (ITER)."""
+"""Procesamiento de INEGI-POP-001: localidades del Censo de Población y Vivienda 2020."""
+
+from __future__ import annotations
 
 import pandas as pd
 
-from health_data.pipeline import (
+from health_data.config import (
     PROCESSED_DATA_DIR,
     PROJECT_ROOT,
     RAW_DATA_DIR,
     ensure_directories,
 )
 
-
 ARCHIVO_CRUDO = RAW_DATA_DIR / "iter_26csv20.zip"
 ARCHIVO_SALIDA = PROCESSED_DATA_DIR / "inegi-pop-001_localidades.parquet"
 
-# Claves de localidad de los totales (0000) y de los acumulados de localidades
-# de una (9998) y de dos viviendas (9999).
+# Claves de localidad de los totales (0000) y acumulados de una (9998) y dos viviendas (9999)
 TOTALES_Y_ACUMULADOS = ["0000", "9998", "9999"]
 
 RENOMBRAR = {
@@ -37,7 +37,6 @@ RENOMBRAR = {
     "VPH_NDACMM": "viviendas_sin_auto_ni_moto",
 }
 
-# Porcentaje: (conteo, denominador).
 INDICADORES = {
     "pct_60_y_mas": ("poblacion_60_y_mas", "poblacion_total"),
     "pct_con_discapacidad": ("poblacion_con_discapacidad", "poblacion_total"),
@@ -49,18 +48,11 @@ INDICADORES = {
     ),
 }
 
-# Conteos de personas o viviendas: los de INDICADORES y las viviendas habitadas.
 CONTEOS = list(dict.fromkeys(c for par in INDICADORES.values() for c in par))
 CONTEOS.append("viviendas_habitadas")
 
-# Marcas del ITER en los conteos y la disponibilidad que indican.
 MARCAS = {"*": "CONFIDENCIAL", "N/D": "NO DISPONIBLE"}
-
-# Grados, minutos, segundos y hemisferio, por ejemplo 29°49'33.141" N.
 PATRON_GMS = r"""^(\d{1,3})°(\d{2})'(\d{2}\.\d{3})" ([NSEW])$"""
-
-# Con más personas por vivienda habitada, la localidad probablemente tiene
-# viviendas colectivas, como penales o campos agrícolas.
 PERSONAS_POR_VIVIENDA_COLECTIVA = 10
 
 COLUMNAS_SALIDA = [
@@ -94,7 +86,7 @@ COLUMNAS_SALIDA = [
 
 
 def leer_crudo() -> pd.DataFrame:
-    """Lee el CSV del zip como texto, sin convertir las marcas en vacío."""
+    """Lee el CSV del zip como texto."""
     return pd.read_csv(
         ARCHIVO_CRUDO, dtype=str, encoding="utf-8-sig", keep_default_na=False
     )
@@ -117,7 +109,7 @@ def agregar_disponibilidad(df: pd.DataFrame) -> pd.DataFrame:
 
 def a_entero(serie: pd.Series) -> pd.Series:
     """Convierte texto con dígitos en entero que admite vacíos."""
-    return pd.to_numeric(serie).astype("Int64")
+    return pd.to_numeric(serie, errors="coerce").astype("Int64")
 
 
 def convertir_numeros(df: pd.DataFrame) -> pd.DataFrame:
@@ -150,9 +142,9 @@ def convertir_coordenadas(df: pd.DataFrame) -> pd.DataFrame:
 
 def agregar_cvegeo(df: pd.DataFrame) -> pd.DataFrame:
     """Agrega la clave de 9 dígitos y deja las claves como texto."""
-    cve_ent = df["cve_ent"].astype("string")
-    cve_mun = df["cve_mun"].astype("string")
-    cve_loc = df["cve_loc"].astype("string")
+    cve_ent = df["cve_ent"].astype("string").str.zfill(2)
+    cve_mun = df["cve_mun"].astype("string").str.zfill(3)
+    cve_loc = df["cve_loc"].astype("string").str.zfill(4)
     return df.assign(
         cve_ent=cve_ent,
         cve_mun=cve_mun,
@@ -162,7 +154,7 @@ def agregar_cvegeo(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def sin_espacios_sobrantes(serie: pd.Series) -> pd.Series:
-    """Quita los espacios al inicio y al final, y deja uno solo entre palabras."""
+    """Quita espacios sobrantes."""
     texto = serie.astype("string").str.strip()
     return texto.str.replace(r"\s+", " ", regex=True)
 
@@ -216,17 +208,7 @@ def main() -> None:
     tabla.to_parquet(ARCHIVO_SALIDA, index=False)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
-    quitadas = len(crudo) - len(tabla)
-    sin_denominador = sum(
-        int(tabla[denominador].eq(0).sum()) for _, denominador in INDICADORES.values()
-    )
-    corregidos = tabla["localidad"].ne(tabla["localidad_original"]).sum()
-    print(f"Localidades: {len(tabla)} de {len(crudo)} filas")
-    print(f"Filas de totales y acumulados quitadas: {quitadas}")
-    print(tabla["disponibilidad"].value_counts().to_string())
-    print(f"Localidades con vivienda colectiva: {tabla['vivienda_colectiva'].sum()}")
-    print(f"Porcentajes vacíos por denominador en 0: {sin_denominador}")
-    print(f"Nombres de localidad con espacios corregidos: {corregidos}")
+    print(f"Localidades ITER: {len(tabla)} de {len(crudo)} filas")
     print(f"Tabla guardada en: {ruta}")
 
 
