@@ -143,7 +143,7 @@ routing_status
 - [x] Limpieza y validación de ITER, CONEVAL y CLUES.
 - [x] Dataset consolidado por localidad.
 - [x] Cliente de la API SAKBÉ (token, caché, cuota y reintentos).
-- [x] Integración de SAKBÉ en el cálculo de ruteo (consultas en curso).
+- [x] Integración de SAKBÉ en el cálculo de ruteo (completo: 7,213 de 7,297 localidades con ambos niveles medidos, el 99.99 % de la población).
 - [x] Indicadores de accesibilidad y vulnerabilidad (`src/health_data/analisis.py` y `notebooks/2.0-dd-analisis-accesibilidad.ipynb`).
 - [ ] Validación de tiempos mediante rutas reales.
 
@@ -179,15 +179,17 @@ make rutas         # consulta SAKBÉ hasta agotar la cuota del día; reanudable
 make data          # reconstruye la tabla usando solo rutas en caché (sin gastar cuota)
 ```
 
-Completar las ~7,300 localidades requiere unas 37,000 consultas (~5 días con 3
-tokens). Mientras tanto, las localidades sin ruta conservan la estimación por
-línea recta, factor de sinuosidad y velocidad promedio. La columna
-`routing_status` indica el origen de cada fila:
+El ruteo está completo (18 de octubre de 2026): 7,213 localidades tienen ambos
+niveles medidos con SAKBÉ, 28 solo uno y 56 ninguno porque no tienen carretera
+cercana. A esas 84 localidades (397 habitantes) se les asigna con CONEVAL el
+nivel que falta (ver abajo). La estimación por línea recta solo queda para
+localidades aún no consultadas. La columna `routing_status` indica el origen de
+cada fila:
 
 | Valor | Significado |
 |---|---|
 | `ok` | Ambos niveles medidos con SAKBÉ |
-| `parcial` | Solo un nivel medido con SAKBÉ |
+| `parcial` | Solo un nivel medido con SAKBÉ (SAKBÉ no ubica en su red a los candidatos del otro); el otro, con CONEVAL |
 | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
 | `estimado` | Aún no consultada; se usa la estimación |
 
