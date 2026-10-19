@@ -128,3 +128,16 @@ def test_estilo_mapa_base(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("CARTO_API_KEY")
     (tmp_path / ".env").write_text("CARTO_API_KEY='desde-env'\n", encoding="utf-8")
     assert estilo_mapa_base()["layers"][0]["source"][0].endswith("?key=desde-env")
+
+
+def test_preparar_kaleido_corrige_rutas_con_espacios(tmp_path) -> None:
+    """El lanzador de kaleido 0.2.1 queda con comillas; aplicarlo dos veces no cambia nada."""
+    from health_data.visualization.exportar import preparar_kaleido
+
+    lanzador = tmp_path / "kaleido"
+    lanzador.write_text('#!/bin/bash\nDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"\n\ncd $DIR\n./bin/kaleido $@\n')
+    assert preparar_kaleido(lanzador)
+    texto = lanzador.read_text()
+    assert 'cd "$DIR"\n' in texto and './bin/kaleido "$@"' in texto
+    assert preparar_kaleido(lanzador) and lanzador.read_text() == texto
+    assert preparar_kaleido(tmp_path / "no-existe")  # Windows: no hay lanzador .sh

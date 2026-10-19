@@ -66,3 +66,11 @@ data/processed/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# ============================================================
+# Figuras generadas
+# ============================================================
+
+# Los HTML interactivos del notebook pueden llevar la llave de CARTO en el mapa
+# base y se regeneran al ejecutarlo; solo se versionan los PNG.
+reports/figures/*.html
