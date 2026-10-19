@@ -47,8 +47,13 @@ ARCHIVO_POP = PROCESSED_DATA_DIR / "inegi-pop-001_localidades.parquet"
 ARCHIVO_CONEVAL = PROCESSED_DATA_DIR / "coneval-acc-001_localidades.parquet"
 ARCHIVO_SALUD = PROCESSED_DATA_DIR / "salud-001_establecimientos.parquet"
 
-#Factor medio de sinuosidad carretera para el terreno de Sonora (relación red vial / línea recta)
-FACTOR_SINUOSIDAD = 1.28
+# Estimación por línea recta: último recurso, sin ruta SAKBÉ ni respaldo CONEVAL. Calibrada el
+# 18/10/2026 con 7,213 rutas SAKBÉ de Sonora: el factor es la mediana de distancia por carretera entre
+# distancia en línea recta, y cada velocidad la mediana real del tramo (antes: 1.28 y 35/50/70/85 km/h).
+FACTOR_SINUOSIDAD = {"primer": 1.57, "segundo": 1.40}
+# Velocidad (km/h) por tramo de distancia por carretera: ≤ 5, 5–25, 25–60 y > 60 km
+CORTES_TRAMO_KM = (5.0, 25.0, 60.0)
+VELOCIDADES_KMH = {"primer": (37.0, 49.0, 48.0, 47.0), "segundo": (39.0, 51.0, 59.0, 62.0)}
 
 #Establecimientos más cercanos en línea recta que se miden con SAKBÉ por nivel
 CANDIDATOS_POR_NIVEL = 2
@@ -102,30 +107,19 @@ def distancia_haversine(
     return r_tierra * c
 
 
-def estimar_velocidad_promedio(distancia_carretera_km: np.ndarray) -> np.ndarray:
-    """Estima la velocidad media según la longitud del trayecto por tipo de vía."""
-    velocidad = np.empty_like(distancia_carretera_km, dtype=float)
-    # Trayectos muy cortos (calles urbanas / caminos vecinales)
-    m1 = distancia_carretera_km <= 5.0
-    velocidad[m1] = 35.0
-    # Trayectos cortos (caminos rurales pavimentados)
-    m2 = (distancia_carretera_km > 5.0) & (distancia_carretera_km <= 25.0)
-    velocidad[m2] = 50.0
-    # Trayectos medianos (carreteras estatales)
-    m3 = (distancia_carretera_km > 25.0) & (distancia_carretera_km <= 60.0)
-    velocidad[m3] = 70.0
-    # Trayectos largos (red carretera federal / autopistas)
-    m4 = distancia_carretera_km > 60.0
-    velocidad[m4] = 85.0
-    return velocidad
+def estimar_velocidad_promedio(distancia_carretera_km: np.ndarray, nivel: str = "primer") -> np.ndarray:
+    """Velocidad media (km/h) según la longitud del trayecto, calibrada por nivel de atención."""
+    tramo = np.digitize(distancia_carretera_km, CORTES_TRAMO_KM, right=True)
+    return np.asarray(VELOCIDADES_KMH[nivel], dtype=float)[tramo]
 
 
 def emparejar_mas_cercano(
     lats_loc: np.ndarray,
     lons_loc: np.ndarray,
     facilidades: pd.DataFrame,
+    nivel: str = "primer",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Calcula el establecimiento más cercano en vector para todas las localidades.
+    """Establecimiento más cercano en línea recta y tiempo estimado, para todas las localidades.
 
     Returns:
         (clues_mas_cercano, distancia_carretera_km, tiempo_traslado_min)
@@ -147,10 +141,10 @@ def emparejar_mas_cercano(
     clues_cercano = clues_f[indices_min]
 
     #Distancia estimada por carretera aplicando factor de sinuosidad
-    dist_carretera_km = dist_recta_km * FACTOR_SINUOSIDAD
+    dist_carretera_km = dist_recta_km * FACTOR_SINUOSIDAD[nivel]
 
     #Tiempo en minutos según velocidad de perfil vial
-    velocidades = estimar_velocidad_promedio(dist_carretera_km)
+    velocidades = estimar_velocidad_promedio(dist_carretera_km, nivel)
     tiempo_min = (dist_carretera_km / velocidades) * 60.0
 
     #Mínimo 3 minutos de tiempo base si la clínica está en la misma localidad
@@ -369,22 +363,24 @@ def excluir_localidades(pop: pd.DataFrame, excluidas: dict[str, str]) -> pd.Data
 
 
 def imputar_con_coneval(tabla: pd.DataFrame, minimo: int = MINIMO_GRUPO_CONEVAL) -> pd.DataFrame:
-    """Respaldo para los niveles sin ruta SAKBÉ en localidades ``sin_ruta`` o ``parcial``.
+    """Respaldo para los niveles sin ruta SAKBÉ (localidades ``sin_ruta``, ``parcial`` o ``estimado``).
 
     Asigna la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo
     municipio y con la misma categoría de CONEVAL de tiempo al centro de servicios
     (``tiempo_centro_servicios``). Si el municipio tiene menos de ``minimo`` localidades de esa
-    categoría, usa la mediana estatal de la categoría. El método del nivel pasa a ``coneval``.
+    categoría, usa la mediana estatal de la categoría, también con al menos ``minimo``. Si no hay
+    suficientes rutas medidas (por ejemplo, al inicio de una corrida), se conserva la estimación
+    por línea recta. El método del nivel pasa a ``coneval``.
 
-    Validado contra las rutas reales (excluyendo a cada localidad de su mediana): en localidades
-    a 2 km o más de carretera pavimentada acierta el lado del umbral en ~91 % (hospital) y ~84 %
-    (centro de salud), contra ~72 % de la estimación por línea recta, que subestima ~40 y ~17 min.
+    Validado con validación cruzada contra las rutas reales: en localidades a 2 km o más de
+    carretera pavimentada acierta el lado del umbral en ~90 % (hospital) y ~83 % (centro de
+    salud), contra ~82 % y ~80 % de la estimación recalibrada y ~72 % de la anterior.
     """
     if "tiempo_centro_servicios" not in tabla.columns:
         return tabla
     t = tabla.copy()
     categoria = t["tiempo_centro_servicios"].astype(object)
-    candidatas = t["routing_status"].isin([ESTADO_SIN_RUTA, "parcial"]) & categoria.notna()
+    candidatas = t["routing_status"].isin([ESTADO_SIN_RUTA, "parcial", "estimado"]) & categoria.notna()
 
     for col_t, col_d, col_m in (
         ("primary_time_min", "primary_distance_km", "primary_method"),
@@ -399,14 +395,15 @@ def imputar_con_coneval(tabla: pd.DataFrame, minimo: int = MINIMO_GRUPO_CONEVAL)
         base = t.loc[medidas, ["municipality_name", col_t, col_d]].assign(categoria=categoria[medidas])
         por_mun = base.groupby(["municipality_name", "categoria"])[[col_t, col_d]].agg(["median", "size"])
         por_mun = por_mun[por_mun[(col_t, "size")] >= minimo]
-        por_cat = base.groupby("categoria")[[col_t, col_d]].median()
+        por_cat = base.groupby("categoria")[[col_t, col_d]].agg(["median", "size"])
+        por_cat = por_cat[por_cat[(col_t, "size")] >= minimo]
 
         for i in t.index[faltan]:
             clave = (t.at[i, "municipality_name"], categoria[i])
             if clave in por_mun.index:
                 tiempo, distancia = por_mun.at[clave, (col_t, "median")], por_mun.at[clave, (col_d, "median")]
             elif categoria[i] in por_cat.index:
-                tiempo, distancia = por_cat.at[categoria[i], col_t], por_cat.at[categoria[i], col_d]
+                tiempo, distancia = por_cat.at[categoria[i], (col_t, "median")], por_cat.at[categoria[i], (col_d, "median")]
             else:
                 continue
             t.at[i, col_t] = round(float(tiempo), 1)
@@ -488,10 +485,10 @@ def consolidar_dataset_final(
     lons_loc = pop["longitud"].to_numpy()
 
     #Emparejar Primer Nivel
-    clues_1, dist_1, time_1 = emparejar_mas_cercano(lats_loc, lons_loc, primer_nivel)
+    clues_1, dist_1, time_1 = emparejar_mas_cercano(lats_loc, lons_loc, primer_nivel, "primer")
 
     #Emparejar Segundo Nivel
-    clues_2, dist_2, time_2 = emparejar_mas_cercano(lats_loc, lons_loc, segundo_nivel)
+    clues_2, dist_2, time_2 = emparejar_mas_cercano(lats_loc, lons_loc, segundo_nivel, "segundo")
 
     #Sustituir por rutas reales de SAKBÉ donde estén disponibles
     metodo_1 = metodo_2 = np.full(len(pop), "estimado", dtype=object)

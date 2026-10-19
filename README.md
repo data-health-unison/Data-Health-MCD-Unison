@@ -177,7 +177,7 @@ automóvil en condiciones óptimas.
 - [x] Registro de descargas con huella SHA-256 (`catalog/ingestions.csv`).
 - [x] Validación de la estimación por línea recta y del respaldo CONEVAL contra las rutas reales.
 - [x] Diccionario de la tabla final (`references/diccionario_accesibilidad_localidades.md`).
-- [ ] Recalibrar la estimación por línea recta (solo se usa en localidades aún no consultadas).
+- [x] Estimación por línea recta recalibrada con las rutas de Sonora (solo es el último recurso).
 - [ ] Tiempo dentro del establecimiento (espera y atención).
 
 ### API SAKBÉ
@@ -215,27 +215,40 @@ make data          # reconstruye la tabla usando solo rutas en caché (sin gasta
 El ruteo está completo (18 de octubre de 2026): 7,213 localidades tienen ambos
 niveles medidos con SAKBÉ, 28 solo uno y 56 ninguno porque no tienen carretera
 cercana. A esas 84 localidades (397 habitantes) se les asigna con CONEVAL el
-nivel que falta (ver abajo). La estimación por línea recta solo queda para
-localidades aún no consultadas. La columna `routing_status` indica el origen de
-cada fila:
+nivel que falta (ver abajo). Las localidades aún no consultadas también usan ese
+respaldo; la estimación por línea recta queda solo como último recurso. La
+columna `routing_status` indica el origen de cada fila:
 
 | Valor | Significado |
 |---|---|
 | `ok` | Ambos niveles medidos con SAKBÉ |
 | `parcial` | Solo un nivel medido con SAKBÉ (SAKBÉ no ubica en su red a los candidatos del otro); el otro, con CONEVAL |
 | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
-| `estimado` | Aún no consultada; se usa la estimación |
+| `estimado` | Aún no consultada; tiempo asignado con CONEVAL (o la estimación, si faltan datos) |
 
 **Localidades excluidas.** Las 3 localidades de la Isla del Tiburón (16 habitantes) se excluyen del ruteo y
 del análisis: no tienen acceso por carretera y parecen campamentos de pesca, no localidades permanentes. La
 lista y el motivo están en `config/fuentes_health.yaml` (`localidades_excluidas`).
 
-**Respaldo con CONEVAL.** A los niveles sin ruta SAKBÉ de las localidades `sin_ruta` y `parcial` se les
+**Respaldo con CONEVAL.** A los niveles sin ruta SAKBÉ (localidades `sin_ruta`, `parcial` o `estimado`) se les
 asigna la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo municipio y con la
 misma categoría de tiempo al centro de servicios de CONEVAL (si son menos de 5, la mediana estatal de esa
-categoría). Validado contra las rutas reales excluyendo a cada localidad de su mediana: en localidades a 2 km
-o más de carretera pavimentada acierta el lado del umbral en ~91 % (hospital, 120 min) y ~84 % (centro de
-salud, 60 min), contra ~72 % de la estimación por línea recta, que subestima ~40 y ~17 min.
+categoría, también con al menos 5). Con validación cruzada contra las rutas reales, en localidades a 2 km o más
+de carretera pavimentada acierta el lado del umbral en ~90 % (hospital, 120 min) y ~83 % (centro de salud,
+60 min).
+
+**Estimación por línea recta (último recurso).** Si tampoco hay rutas suficientes para el respaldo, se usa la
+distancia en línea recta × un factor de rodeo, a velocidades por tramo. Se calibró con las 7,213 rutas SAKBÉ
+de Sonora (antes: factor 1.28 y 35, 50, 70 y 85 km/h, que subestimaba ~40 min al hospital en zonas alejadas):
+
+| Nivel | Factor de rodeo | Velocidad por tramo (≤ 5, 5–25, 25–60, > 60 km) |
+|---|---|---|
+| Centro de salud | 1.57 | 37, 49, 48 y 47 km/h |
+| Hospital | 1.40 | 39, 51, 59 y 62 km/h |
+
+En localidades alejadas acierta el umbral en ~80–82 %, contra ~72 % de la anterior y ~83–90 % del respaldo con
+CONEVAL. Ni SAKBÉ ni la estimación miden cómo maneja la gente en cada lugar: SAKBÉ asigna a cada tramo una
+velocidad según el tipo de vía, igual en todo el estado.
 
 `primary_method` y `secondary_method` indican `sakbe`, `coneval` o `estimado` por nivel, y
 `routing_consulted_at` la fecha de consulta. La validación
