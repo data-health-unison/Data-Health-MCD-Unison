@@ -194,7 +194,7 @@ docker compose run --rm app python -m health_data.ingestion.sakbe --probar  #rut
 - Las respuestas se guardan en `data/interim/sakbe_cache.sqlite`; una consulta
   repetida (incluso si no hubo ruta) no vuelve a gastar cuota.
 - Cada petición real se contabiliza por día y por token. Al llegar a
-  `limite_diario` (`config/fuentes_health.yaml`, 2500 por omisión), o si el
+  `limite_diario` (`config/fuentes_health.yaml`, 10,000 por token), o si el
   servidor rechaza un token, el cliente pasa al siguiente. Cuando todos se
   agotan se detiene con `SakbeCuotaAgotada`.
 - Cada ruta guarda su fecha de consulta (`consultado_en`), ya que la red se

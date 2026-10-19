@@ -7,7 +7,7 @@ umbrales:
   tiempo_muy_critico_min: 120      # > 120 min hacia 1er nivel: accesibilidad crítica
   tiempo_critico_segundo_nivel_min: 120  # > 120 min hacia 2do nivel (hospital); acordado por el equipo: la condición del paciente que requiere hospital hace crítico cada minuto
   poblacion_min_localidad: 100     # corte referencial de tamaño de localidad
-  sakbe_limite_diario: 2500        # cuota diaria estimada de consultas API SAKBÉ
+  sakbe_limite_diario: 10000       # consultas diarias por token de SAKBÉ (ver limite_diario de INEGI-ROUTE-001)
   cv_no_fiable: 0.25               # coeficiente de variación máximo aceptable
 
 # Localidades que se excluyen del ruteo y del análisis (por cvegeo), con su motivo.
@@ -78,6 +78,9 @@ fuentes:
     nombre: "SAKBÉ - API de Ruteo Red Carretera INEGI"
     api_base: "https://gaia.inegi.org.mx/sakbe_v3.1/"  #https://www.inegi.org.mx/servicios/Ruteo/
     token_env: "SAKBE_TOKEN"
-    limite_diario: 2500
+    # INEGI no documenta un límite. El catálogo estimaba ~2,500 por token, pero el 18/10/2026 un token aceptó
+    # 11,414 consultas en un día sin rechazo. Se usa 10,000: por debajo de lo comprobado. Si SAKBÉ rechaza un
+    # token antes, el cliente lo detecta, lo registra en limites_detectados y pasa al siguiente.
+    limite_diario: 10000
     estado: "approved"
     prioridad: "alta"
