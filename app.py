@@ -434,7 +434,7 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     st.markdown(
         f"""
     ### Cómo se calcula el tiempo de traslado
-    1. Para cada localidad se eligen los **2 establecimientos operativos más cercanos en línea recta** por nivel de atención.
+    1. Para cada localidad se eligen los **2 establecimientos operativos más cercanos en línea recta** por nivel de atención. Si SAKBÉ no ubica a uno en su red o no da ruta hacia él, se usa el siguiente más cercano.
     2. Con la **API de Ruteo SAKBÉ de INEGI** se mide la ruta por carretera hacia cada uno y se conserva la de menor tiempo.
     3. Si la clínica queda sobre el mismo tramo carretero que la localidad, el traslado se considera local (mínimo 3 min).
     4. **Sin ruta SAKBÉ** (sin carretera cercana, o localidad aún no consultada): se asigna el tiempo típico medido con SAKBÉ en las localidades del **mismo municipio y con el mismo grado de aislamiento de CONEVAL** (tiempo al centro de servicios). Si hay menos de 5 localidades así en el municipio, se usa la de todo el estado. Comparado con las rutas reales, acierta si la localidad supera el umbral en ~90 % (hospital) y ~83 % (centro de salud) de los casos en zonas alejadas.

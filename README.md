@@ -134,9 +134,9 @@ Con el ruteo completo (18 de octubre de 2026). Una localidad tiene **acceso comp
 60 min de un centro de salud o a más de 120 min de un hospital; los umbrales están en
 `config/fuentes_health.yaml`.
 
-- **21,567 personas (0.73 % del estado) en 883 localidades tienen acceso comprometido**, en 53 de los 72
+- **21,560 personas (0.73 % del estado) en 882 localidades tienen acceso comprometido**, en 53 de los 72
   municipios.
-- **La brecha está en el hospital.** El 99.45 % de la población vive a 30 min o menos de un centro de salud,
+- **La brecha está en el hospital.** El 99.46 % de la población vive a 30 min o menos de un centro de salud,
   pero 20,520 personas viven a más de 2 horas de un hospital y 9,822 a más de 3. El 85 % de las personas con
   acceso comprometido tiene un centro de salud cerca y el hospital lejos.
 - **Se concentra en la sierra y en el desierto.** Yécora (4,793), Pitiquito (3,371), Sáric (2,042), Álamos
@@ -148,7 +148,7 @@ Con el ruteo completo (18 de octubre de 2026). Una localidad tiene **acceso comp
   comprometido el 1.48 % de los hablantes de lengua indígena (el doble), el 1.09 % de quienes no tienen
   afiliación a servicios de salud, el 0.98 % de las personas de 60 años y más y el 0.91 % de las personas con
   discapacidad.
-- **El resultado depende del umbral.** Con 90 min al hospital serían 39,840 personas; con 60 min, 99,333.
+- **El resultado depende del umbral.** Con 90 min al hospital serían 39,835 personas; con 60 min, 99,333.
 
 Dónde verlo:
 
@@ -173,7 +173,7 @@ automóvil en condiciones óptimas.
 - [x] Limpieza y validación de ITER, CONEVAL y CLUES.
 - [x] Dataset consolidado por localidad.
 - [x] Cliente de la API SAKBÉ (token, caché, cuota y reintentos).
-- [x] Integración de SAKBÉ en el cálculo de ruteo (completo: 7,213 de 7,297 localidades con ambos niveles medidos, el 99.99 % de la población).
+- [x] Integración de SAKBÉ en el cálculo de ruteo (completo: 7,239 de 7,297 localidades con ambos niveles medidos, el 99.99 % de la población).
 - [x] Indicadores de accesibilidad y vulnerabilidad (`src/health_data/analisis.py` y `notebooks/2.0-dd-analisis-accesibilidad.ipynb`).
 - [x] Revisión manual de coordenadas de CLUES (58 verificadas, 12 fuera de operación).
 - [x] Registro de descargas con huella SHA-256 (`catalog/ingestions.csv`).
@@ -206,7 +206,8 @@ docker compose run --rm app python -m health_data.ingestion.sakbe --probar  #rut
 
 Para cada localidad se eligen los **2 establecimientos más cercanos en línea
 recta** por nivel de atención y se mide con SAKBÉ la ruta real por carretera a
-cada uno; se conserva el de menor tiempo. Las localidades se procesan de mayor a
+cada uno; se conserva el de menor tiempo. Si SAKBÉ no ubica a un establecimiento en
+su red o no da ruta hacia él, se usa el siguiente más cercano (hasta 3 de respaldo). Las localidades se procesan de mayor a
 menor población.
 
 ```bash
@@ -214,9 +215,9 @@ make rutas         # consulta SAKBÉ hasta agotar la cuota del día; reanudable
 make data          # reconstruye la tabla usando solo rutas en caché (sin gastar cuota)
 ```
 
-El ruteo está completo (18 de octubre de 2026): 7,213 localidades tienen ambos
-niveles medidos con SAKBÉ, 28 solo uno y 56 ninguno porque no tienen carretera
-cercana. A esas 84 localidades (397 habitantes) se les asigna con CONEVAL el
+El ruteo está completo (18 de octubre de 2026): 7,239 localidades tienen ambos
+niveles medidos con SAKBÉ, 2 solo uno y 56 ninguno porque no tienen carretera
+cercana. A esas 58 localidades (241 habitantes) se les asigna con CONEVAL el
 nivel que falta (ver abajo). Las localidades aún no consultadas también usan ese
 respaldo; la estimación por línea recta queda solo como último recurso. La
 columna `routing_status` indica el origen de cada fila:
@@ -263,7 +264,7 @@ al establecimiento más cercano. No mide costos, calidad, capacidad hospitalaria
 transporte público ni el tiempo dentro del establecimiento (espera y atención), que se analizará después. Para
 quien no tiene vehículo, el tiempo real es mayor.
 
-Las 84 localidades sin ruta SAKBÉ en algún nivel (397 habitantes) usan un respaldo con CONEVAL, que es una
+Las 58 localidades sin ruta SAKBÉ en algún nivel (241 habitantes) usan un respaldo con CONEVAL, que es una
 aproximación, y se excluyen 3 localidades de la Isla del Tiburón sin acceso por carretera. Los resultados
 difundidos deben citar a INEGI y a la API de Ruteo, como piden sus condiciones de uso.
 
