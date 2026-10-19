@@ -28,7 +28,7 @@ def test_distancia_haversine_conocida() -> None:
 
 def test_estimar_velocidad_promedio() -> None:
     """Velocidades calibradas con rutas SAKBÉ de Sonora, por tramo y nivel de atención."""
-    distancias = np.array([2.0, 5.0, 15.0, 40.0, 100.0])  # 5 km cae en el primer tramo (≤ 5)
+    distancias = np.array([2.0, 5.0, 15.0, 40.0, 100.0])  #5km cae en el primer tramo (≤ 5)
     assert list(estimar_velocidad_promedio(distancias, "primer")) == [37.0, 37.0, 49.0, 48.0, 47.0]
     assert list(estimar_velocidad_promedio(distancias, "segundo")) == [39.0, 39.0, 51.0, 59.0, 62.0]
 
@@ -36,12 +36,12 @@ def test_estimar_velocidad_promedio() -> None:
 def test_estimacion_calibrada_por_nivel() -> None:
     """La distancia estimada usa el factor de rodeo de cada nivel (1.57 y 1.40)."""
     loc = (np.array([29.0]), np.array([-111.0]))
-    fac = pd.DataFrame({"clues": ["X"], "latitud": [29.2], "longitud": [-111.0]})  # ~22.2 km en línea recta
+    fac = pd.DataFrame({"clues": ["X"], "latitud": [29.2], "longitud": [-111.0]})  #~22.2 km en línea recta
     recta = float(distancia_haversine(29.0, -111.0, 29.2, -111.0))
     _, d1, t1 = emparejar_mas_cercano(*loc, fac, "primer")
     _, d2, t2 = emparejar_mas_cercano(*loc, fac, "segundo")
     assert d1[0] == pytest.approx(recta * 1.57, abs=0.01) and d2[0] == pytest.approx(recta * 1.40, abs=0.01)
-    assert t1[0] == pytest.approx(d1[0] / 48 * 60, abs=0.1)  # 34.9 km: tramo 25–60 del 1er nivel → 48 km/h
+    assert t1[0] == pytest.approx(d1[0] / 48 * 60, abs=0.1)  #34.9 km: tramo 25–60 del 1er nivel → 48 km/h
 
 
 def test_emparejar_mas_cercano() -> None:
@@ -185,7 +185,7 @@ def test_mismo_origen_destino_es_trayecto_local() -> None:
     cliente = ClienteMismoNodo()
     r = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.001, -111.0)])
     assert r.estado == "ok" and r.clues == "A"
-    assert r.tiempo_min == 3.0  # ~0.1 km: queda en el mínimo
+    assert r.tiempo_min == 3.0  #~0.1 km: queda en el mínimo
 
 
 def test_caida_temporal_de_sakbe_espera_y_reintenta(monkeypatch) -> None:
@@ -208,7 +208,7 @@ def test_caida_temporal_de_sakbe_espera_y_reintenta(monkeypatch) -> None:
     r = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)])
     assert r.estado == "ok" and cliente.solo_cache is False
 
-    # Si la caída persiste tras todas las esperas, se pausan las consultas
+    #Si la caída persiste tras todas las esperas, se pausan las consultas
     cliente = ClienteIntermitente()
     cliente.fallas = 99
     r = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)])
@@ -226,24 +226,24 @@ def test_imputar_con_coneval() -> None:
             "secondary_time_min": t2, "secondary_distance_km": t2 / 2, "secondary_method": m2,
         }
 
-    filas = [fila("A", "3 A 4 HRS.", "ok", 30 + i, 170 + i) for i in range(5)]  # grupo municipal de 5
-    filas += [fila("B", "3 A 4 HRS.", "ok", 50, 200)]  # B tiene solo 1: se usa la estatal
+    filas = [fila("A", "3 A 4 HRS.", "ok", 30 + i, 170 + i) for i in range(5)]  #grupo municipal de 5
+    filas += [fila("B", "3 A 4 HRS.", "ok", 50, 200)]  #B tiene solo 1: se usa la estatal
     filas += [
         fila("A", "3 A 4 HRS.", "sin_ruta", 10, 60, "estimado", "estimado"),
         fila("B", "3 A 4 HRS.", "sin_ruta", 10, 60, "estimado", "estimado"),
-        fila("A", "3 A 4 HRS.", "parcial", 5, 60, "sakbe", "estimado"),  # solo falta el 2do nivel
-        fila("A", None, "sin_ruta", 10, 60, "estimado", "estimado"),  # sin dato CONEVAL: no cambia
-        fila("A", "3 A 4 HRS.", "estimado", 10, 60, "estimado", "estimado"),  # aún no consultada: también usa CONEVAL
+        fila("A", "3 A 4 HRS.", "parcial", 5, 60, "sakbe", "estimado"),  #solo falta el 2do nivel
+        fila("A", None, "sin_ruta", 10, 60, "estimado", "estimado"),  #sin dato CONEVAL: no cambia
+        fila("A", "3 A 4 HRS.", "estimado", 10, 60, "estimado", "estimado"),  #aún no consultada: también usa CONEVAL
     ]
     r = imputar_con_coneval(pd.DataFrame(filas), minimo=5)
 
     a, b, parcial, sin_dato, pendiente = (r.iloc[i] for i in range(6, 11))
-    # Medianas del municipio A; el 1er nivel incluye el medido de la localidad parcial (5)
+    #Medianas del municipio A; el 1er nivel incluye el medido de la localidad parcial (5)
     assert (a.primary_time_min, a.secondary_time_min) == (31.5, 172.0)
     assert (a.primary_method, a.secondary_method) == ("coneval", "coneval")
     assert a.secondary_distance_km == 86.0
-    assert (b.primary_time_min, b.secondary_time_min) == (32.0, 172.5)  # medianas estatales de la categoría
-    assert (parcial.primary_time_min, parcial.primary_method) == (5, "sakbe")  # lo medido no se toca
+    assert (b.primary_time_min, b.secondary_time_min) == (32.0, 172.5)  #medianas estatales de la categoría
+    assert (parcial.primary_time_min, parcial.primary_method) == (5, "sakbe")  #lo medido no se toca
     assert (parcial.secondary_time_min, parcial.secondary_method) == (172.0, "coneval")
     assert (sin_dato.secondary_time_min, sin_dato.secondary_method) == (60, "estimado")
     assert (pendiente.secondary_time_min, pendiente.secondary_method) == (172.0, "coneval")
@@ -263,7 +263,7 @@ def test_imputar_respeta_que_el_1er_nivel_no_supere_al_2do() -> None:
         ]
     )
     r = imputar_con_coneval(base, minimo=1)
-    # Mediana del 1er nivel = 90, pero el hospital medido está a 40: queda en 40
+    #Mediana del 1er nivel = 90, pero el hospital medido está a 40: queda en 40
     assert r.iloc[1].primary_time_min == 40.0
 
 
@@ -291,3 +291,40 @@ def test_imputar_sin_rutas_suficientes_conserva_la_estimacion() -> None:
     r = imputar_con_coneval(pd.DataFrame(filas), minimo=5)
     assert (r.iloc[3].secondary_time_min, r.iloc[3].secondary_method) == (80.0, "estimado")
 
+
+
+def test_pasa_al_respaldo_si_sakbe_no_ubica_a_un_candidato() -> None:
+    """Si un candidato no tiene tramo de red, se mide el siguiente hasta tener los necesarios."""
+    cliente = ClienteFalso(sin_linea={(29.1, -111.0)})  #SAKBÉ no ubica al más cercano (A)
+    candidatos = [("A", 29.1, -111.0), ("B", 29.2, -111.0), ("C", 29.3, -111.0), ("D", 29.4, -111.0)]
+    r = mejor_ruta_sakbe(cliente, 29.0, -111.0, candidatos, necesarios=2)
+    assert r.estado == "ok" and r.clues in {"B", "C"}
+    assert [destino for _, destino in cliente.rutas_calculadas] == ["29.2,-111.0", "29.3,-111.0"]  #D no se consulta
+
+
+def test_respaldo_no_cambia_lo_que_ya_tiene_dos_medidos() -> None:
+    """Con los 2 primeros medidos, los de respaldo no se consultan."""
+    cliente = ClienteFalso()
+    candidatos = [("A", 29.1, -111.0), ("B", 29.2, -111.0), ("C", 29.3, -111.0)]
+    mejor_ruta_sakbe(cliente, 29.0, -111.0, candidatos, necesarios=2)
+    assert len(cliente.rutas_calculadas) == 2
+
+
+def test_pendiente_ocupa_lugar_y_no_gasta_respaldos() -> None:
+    """Sin cuota, un candidato pendiente cuenta como uno de los necesarios: no se piden respaldos."""
+    cliente = ClienteFalso()
+    cliente.solo_cache = True  #calcular_ruta lanza SakbeNoEnCache
+    candidatos = [("A", 29.1, -111.0), ("B", 29.2, -111.0), ("C", 29.3, -111.0)]
+    r = mejor_ruta_sakbe(cliente, 29.0, -111.0, candidatos, necesarios=2)
+    assert r.estado == "pendiente"
+
+
+def test_rutear_usa_respaldos() -> None:
+    """rutear_con_sakbe pide k + respaldos candidatos y mide k."""
+    pop = pd.DataFrame({"latitud": [29.0], "longitud": [-111.0], "poblacion_total": [10]})
+    fac = pd.DataFrame(
+        {"clues": ["A", "B", "C"], "latitud": [29.1, 29.2, 29.3], "longitud": [-111.0, -111.0, -111.0]}
+    )
+    cliente = ClienteFalso(sin_linea={(29.1, -111.0), (29.2, -111.0)})  #solo C es ubicable
+    res = rutear_con_sakbe(pop, {"primer": fac}, cliente, k=2)
+    assert (res["primer"][0].estado, res["primer"][0].clues) == ("ok", "C")

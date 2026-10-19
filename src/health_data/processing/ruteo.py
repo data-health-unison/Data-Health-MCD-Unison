@@ -57,6 +57,8 @@ VELOCIDADES_KMH = {"primer": (37.0, 49.0, 48.0, 47.0), "segundo": (39.0, 51.0, 5
 
 #Establecimientos más cercanos en línea recta que se miden con SAKBÉ por nivel
 CANDIDATOS_POR_NIVEL = 2
+# Siguientes más cercanos que se prueban si SAKBÉ no ubica a un candidato o no da ruta hacia él
+CANDIDATOS_DE_RESPALDO = 3
 #Tiempo mínimo de traslado (clínica en la misma localidad)
 TIEMPO_MINIMO_MIN = 3.0
 #Velocidad urbana cuando origen y destino quedan sobre el mismo tramo carretero
@@ -227,12 +229,16 @@ def mejor_ruta_sakbe(
     lat: float,
     lon: float,
     candidatos: list[tuple[str, float, float]],
+    necesarios: int | None = None,
 ) -> ResultadoRuta:
-    """Mide con SAKBÉ la ruta hacia cada candidato (clues, lat, lon) y devuelve la más rápida.
+    """Mide con SAKBÉ la ruta hacia los candidatos (clues, lat, lon) y devuelve la más rápida.
 
-    El resultado es ``pendiente`` si algún candidato no pudo consultarse (cuota,
-    red o modo solo caché): se completará en una ejecución posterior.
+    Los candidatos van del más cercano al más lejano en línea recta. Se miden hasta tener
+    ``necesarios`` (por omisión, todos); si SAKBÉ no ubica a uno o no da ruta hacia él, se
+    pasa al siguiente. El resultado es ``pendiente`` si algún candidato no pudo consultarse
+    (cuota, red o modo solo caché): se completará en una ejecución posterior.
     """
+    necesarios = len(candidatos) if necesarios is None else necesarios
     try:
         origen = _llamar(cliente, cliente.buscar_linea, lat, lon)
     except SakbeSinRuta:
@@ -248,7 +254,10 @@ def mejor_ruta_sakbe(
 
     mejor: ResultadoRuta | None = None
     pendiente = False
+    ocupados = 0  #candidatos medidos o pendientes; los que no tienen ruta no cuentan
     for clues, lat_f, lon_f in candidatos:
+        if ocupados >= necesarios:
+            break
         try:
             destino = _llamar(cliente, cliente.buscar_linea, lat_f, lon_f)
             if destino.id_routing_net == origen.id_routing_net:
@@ -260,22 +269,23 @@ def mejor_ruta_sakbe(
         except SakbeSinRuta as exc:
             if not _es_mismo_origen_destino(exc):
                 continue
-            # Tramos distintos que SAKBÉ considera el mismo punto (comparten nodo): trayecto local
+            #Tramos distintos que SAKBÉ considera el mismo punto (comparten nodo): trayecto local
             distancia, tiempo, consultado_en = _trayecto_local(lat, lon, lat_f, lon_f)
         except (SakbeCuotaAgotada, SakbeConexionError) as exc:
             _pausar_consultas(cliente, str(exc))
-            pendiente = True
+            pendiente, ocupados = True, ocupados + 1
             continue
         except SakbeNoEnCache:
-            pendiente = True
+            pendiente, ocupados = True, ocupados + 1
             continue
         except SakbeTokenError:
             raise
         except SakbeError as exc:
             log.warning("Respuesta inesperada de SAKBÉ hacia %s: %s", clues, exc)
-            pendiente = True
+            pendiente, ocupados = True, ocupados + 1
             continue
 
+        ocupados += 1
         tiempo = max(tiempo, TIEMPO_MINIMO_MIN)
         if mejor is None or tiempo < mejor.tiempo_min:
             mejor = ResultadoRuta(
@@ -313,7 +323,7 @@ def rutear_con_sakbe(
 
     candidatos_por_nivel = {}
     for nivel, fac in niveles.items():
-        indices = candidatos_mas_cercanos(lats, lons, fac, k)
+        indices = candidatos_mas_cercanos(lats, lons, fac, k + CANDIDATOS_DE_RESPALDO)
         tabla = list(zip(fac["clues"], fac["latitud"].astype(float), fac["longitud"].astype(float)))
         candidatos_por_nivel[nivel] = (indices, tabla)
 
@@ -321,7 +331,7 @@ def rutear_con_sakbe(
     for n, i in enumerate(orden, start=1):
         for nivel, (indices, tabla) in candidatos_por_nivel.items():
             candidatos = [tabla[j] for j in indices[i]]
-            resultados[nivel][i] = mejor_ruta_sakbe(cliente, lats[i], lons[i], candidatos)
+            resultados[nivel][i] = mejor_ruta_sakbe(cliente, lats[i], lons[i], candidatos, necesarios=k)
         if n % 250 == 0 and not cliente.solo_cache:
             log.info(
                 "SAKBÉ: %d/%d localidades · %d consultas en esta ejecución · %d restantes hoy",
@@ -410,7 +420,7 @@ def imputar_con_coneval(tabla: pd.DataFrame, minimo: int = MINIMO_GRUPO_CONEVAL)
             t.at[i, col_d] = round(float(distancia), 2)
             t.at[i, col_m] = "coneval"
 
-    # Igual que en el ruteo: el 1er nivel no puede ser más lento que el hospital, que también da atención básica
+    #Igual que en el ruteo: el 1er nivel no puede ser más lento que el hospital, que también da atención básica
     t["primary_time_min"] = np.minimum(t["primary_time_min"], t["secondary_time_min"])
     return t
 
