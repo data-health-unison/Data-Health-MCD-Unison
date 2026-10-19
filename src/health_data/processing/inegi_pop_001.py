@@ -208,7 +208,17 @@ def main() -> None:
     tabla.to_parquet(ARCHIVO_SALIDA, index=False)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
-    print(f"Localidades ITER: {len(tabla)} de {len(crudo)} filas")
+    quitadas = len(crudo) - len(tabla)
+    sin_denominador = sum(
+        int(tabla[denominador].eq(0).sum()) for _, denominador in INDICADORES.values()
+    )
+    corregidos = tabla["localidad"].ne(tabla["localidad_original"]).sum()
+    print(f"Localidades: {len(tabla)} de {len(crudo)} filas")
+    print(f"Filas de totales y acumulados quitadas: {quitadas}")
+    print(tabla["disponibilidad"].value_counts().to_string())
+    print(f"Localidades con vivienda colectiva: {tabla['vivienda_colectiva'].sum()}")
+    print(f"Porcentajes vacíos por denominador en 0: {sin_denominador}")
+    print(f"Nombres de localidad con espacios corregidos: {corregidos}")
     print(f"Tabla guardada en: {ruta}")
 
 

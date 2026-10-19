@@ -229,3 +229,23 @@ def test_localidad_solo_cambia_en_espacios(tabla: pd.DataFrame) -> None:
 def test_sin_nulos_en_columnas_clave(tabla: pd.DataFrame) -> None:
     """Comprueba que las columnas clave no tengan nulos."""
     assert tabla[COLUMNAS_CLAVE].notna().all().all()
+
+
+def test_resumen_de_main(monkeypatch: pytest.MonkeyPatch, tmp_path, capsys) -> None:
+    """main() imprime el resumen detallado y sus cifras cuadran con la tabla que guarda."""
+    if not ARCHIVO_CRUDO.exists():
+        pytest.skip("Falta el archivo crudo de INEGI-POP-001.")
+    from health_data.processing import inegi_pop_001
+
+    monkeypatch.setattr(inegi_pop_001, "ARCHIVO_SALIDA", tmp_path / "salida.parquet")
+    monkeypatch.setattr(inegi_pop_001, "PROJECT_ROOT", tmp_path)
+    inegi_pop_001.main()
+    salida = capsys.readouterr().out
+    generada = pd.read_parquet(tmp_path / "salida.parquet")
+
+    assert f"Localidades: {len(generada)} de " in salida
+    assert f"Localidades con vivienda colectiva: {generada['vivienda_colectiva'].sum()}" in salida
+    corregidos = generada["localidad"].ne(generada["localidad_original"]).sum()
+    assert f"Nombres de localidad con espacios corregidos: {corregidos}" in salida
+    for etiqueta in ["Filas de totales y acumulados quitadas:", "Porcentajes vacíos por denominador en 0:", "COMPLETA"]:
+        assert etiqueta in salida
