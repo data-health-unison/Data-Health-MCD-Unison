@@ -37,6 +37,7 @@ venv:
 install: venv
 	$(PY) -m pip install --upgrade pip
 	$(PY) -m pip install -r requirements.txt
+	PYTHONPATH=src $(PY) -m health_data.visualization.exportar
 
 data: install
 	PYTHONPATH=src $(PY) -m health_data.pipeline

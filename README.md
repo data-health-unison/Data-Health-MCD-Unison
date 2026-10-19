@@ -154,6 +154,8 @@ Dónde verlo:
 
 - **Tablero:** `make app` (o `docker compose up app`) y abrir http://localhost:8501.
 - **Análisis completo:** `notebooks/2.0-dd-analisis-accesibilidad.ipynb`.
+- **Figuras para presentaciones:** `reports/figures/*.png`, que genera el notebook al ejecutarse. Los `.html`
+  interactivos no se versionan, porque el mapa puede llevar la llave de CARTO.
 - **Tabla final:** `data/processed/accesibilidad_localidades.parquet`, una fila por localidad (7,297) con el
   establecimiento de 1er y 2do nivel más cercano, la distancia y el tiempo a cada uno, el origen del tiempo y
   las variables de vulnerabilidad. Sus 34 columnas están descritas en
