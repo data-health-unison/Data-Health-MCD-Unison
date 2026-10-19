@@ -3,7 +3,6 @@
 import pandas as pd
 from health_data.processing.salud_001 import (
     limpiar_textos,
-    normalizar_categorias,
     agregar_sector,
     validar_coordenadas,
 )

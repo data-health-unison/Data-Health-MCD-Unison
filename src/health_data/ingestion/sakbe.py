@@ -50,7 +50,7 @@ TOKEN_ENV = "SAKBE_TOKEN"
 TOKENS_ENV = "SAKBE_TOKENS"
 ARCHIVO_CACHE = INTERIM_DATA_DIR / "sakbe_cache.sqlite"
 
-LIMITE_DIARIO = 2500
+LIMITE_DIARIO = 10_000  # por token; el valor del proyecto está en config/fuentes_health.yaml
 REINTENTOS = 3
 TIMEOUT_SEG = 30
 #Si no hay tramo a una escala, se amplía la búsqueda a la siguiente (cada intento se cachea).
@@ -63,8 +63,9 @@ VEHICULO_AUTOMOVIL = 1
 CODIGOS_TRANSITORIOS = {429, 500, 502, 503, 504}
 PALABRAS_ERROR_TOKEN = ("key", "llave", "token", "clave", "autoriz")
 RESPUESTA_VACIA = "respuesta vacía"
-# Límite por token que indica el catálogo. Por encima de él, un error no reconocido se toma
-# como límite real del servidor (no se guarda en caché) y se registra en limites_detectados.
+# Límite por token que estimaba el catálogo (INEGI no documenta uno). Por encima de él, un error
+# no reconocido se toma como límite real del servidor (no se guarda en caché) y se registra en
+# limites_detectados. Un token aceptó 11,414 consultas en un día sin rechazo (18/10/2026).
 LIMITE_DOCUMENTADO = 2500
 MENSAJES_SIN_RESULTADO = ("no se encontró línea de red", "no deben ser el mismo", RESPUESTA_VACIA)
 PALABRAS_CUOTA_SERVIDOR = ("límite", "limite", "excedi", "cuota", "agotad")
