@@ -21,8 +21,9 @@ Accesibilidad geográfica a servicios de salud de cada localidad de Sonora: el e
 1. Para cada localidad y nivel se eligen los 2 establecimientos más cercanos en línea recta.
 2. Con SAKBÉ se ubica el tramo de carretera más cercano a la localidad y a cada establecimiento (escalas de búsqueda 50,000, 250,000 y 1,000,000), y se calcula la ruta óptima para automóvil. Se conserva la de menor tiempo.
 3. Si la localidad y el establecimiento quedan sobre el mismo tramo, o SAKBÉ responde que origen y destino son el mismo punto, el trayecto es local: distancia en línea recta a 35 km/h, con un mínimo de 3 minutos.
-4. Si no hay ruta SAKBÉ para un nivel (la localidad no tiene carretera cercana o SAKBÉ no ubica a sus candidatos), se usa el respaldo con CONEVAL: la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo municipio y con la misma categoría de `tiempo_centro_servicios`; si son menos de 5, la mediana estatal de esa categoría.
-5. El tiempo al 1er nivel no puede ser mayor que el tiempo al hospital, porque el hospital también da atención básica: se toma el menor de los dos.
+4. Si no hay ruta SAKBÉ para un nivel (la localidad no tiene carretera cercana, SAKBÉ no ubica a sus candidatos o aún no se consulta), se usa el respaldo con CONEVAL: la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo municipio y con la misma categoría de `tiempo_centro_servicios`; si son menos de 5, la mediana estatal de esa categoría, también con al menos 5.
+5. Si tampoco hay rutas suficientes para el respaldo, se usa la estimación por línea recta: distancia × factor de rodeo (1.57 al centro de salud, 1.40 al hospital) a velocidades por tramo medidas en Sonora (de 37 a 62 km/h). En la tabla actual no la usa ninguna localidad.
+6. El tiempo al 1er nivel no puede ser mayor que el tiempo al hospital, porque el hospital también da atención básica: se toma el menor de los dos.
 
 ## Columnas
 
@@ -37,12 +38,12 @@ Accesibilidad geográfica a servicios de salud de cada localidad de Sonora: el e
 | nearest_primary_clues | texto | CLUES del establecimiento de 1er nivel con menor tiempo por carretera. En los niveles con respaldo CONEVAL es el más cercano en línea recta. | 496 establecimientos distintos. | clues de SALUD-001 |
 | primary_distance_km | decimal | Distancia por carretera a ese establecimiento, en km. | 0 a 243.15. Mediana 9.73. | SAKBÉ (`long_km`) o respaldo CONEVAL |
 | primary_time_min | decimal | Tiempo de traslado en automóvil al 1er nivel, en minutos. Nunca mayor que secondary_time_min. | 3 a 413. Mediana 12.4. | SAKBÉ (`tiempo_min`) o respaldo CONEVAL |
-| primary_method | texto | Origen del tiempo al 1er nivel. | sakbe (7,213), coneval (84). estimado solo en localidades aún no consultadas. | Derivada |
+| primary_method | texto | Origen del tiempo al 1er nivel. | sakbe (7,213), coneval (84). estimado solo si no hay ruta SAKBÉ ni datos suficientes para el respaldo (ninguna en la tabla actual). | Derivada |
 | nearest_secondary_clues | texto | CLUES del establecimiento de 2do nivel (hospital) con menor tiempo por carretera. En los niveles con respaldo CONEVAL es el más cercano en línea recta. | 71 establecimientos distintos. | clues de SALUD-001 |
 | secondary_distance_km | decimal | Distancia por carretera a ese hospital, en km. | 0.28 a 369.05. Mediana 31.85. | SAKBÉ o respaldo CONEVAL |
 | secondary_time_min | decimal | Tiempo de traslado en automóvil al 2do nivel, en minutos. | 3 a 413. Mediana 33.1. | SAKBÉ o respaldo CONEVAL |
 | secondary_method | texto | Origen del tiempo al 2do nivel. | sakbe (7,241), coneval (56). | Derivada |
-| routing_status | texto | Origen de los tiempos de la localidad. | ok (7,213): ambos niveles por SAKBÉ. parcial (28): solo un nivel por SAKBÉ y el otro por CONEVAL. sin_ruta (56): ningún nivel por SAKBÉ; ambos por CONEVAL. estimado: aún no consultada (no hay en la tabla actual). | Derivada |
+| routing_status | texto | Origen de los tiempos de la localidad. | ok (7,213): ambos niveles por SAKBÉ. parcial (28): solo un nivel por SAKBÉ y el otro por CONEVAL. sin_ruta (56): ningún nivel por SAKBÉ; ambos por CONEVAL. estimado: aún no consultada; usa CONEVAL o la estimación (ninguna en la tabla actual). | Derivada |
 | routing_consulted_at | texto | Fecha y hora de la consulta a SAKBÉ más reciente entre los dos niveles (ISO 8601). | 16/10/2026 a 18/10/2026. Vacía en las 56 sin_ruta. | SAKBÉ |
 | disponibilidad | texto | Si ITER publica los indicadores de la localidad. | COMPLETA (1,853), CONFIDENCIAL (5,413), NO DISPONIBLE (31). | INEGI-POP-001 |
 | poblacion_60_y_mas | entero | Personas de 60 años y más. | 0 a 97,155. Vacía en 5,444. | INEGI-POP-001 |
@@ -82,7 +83,7 @@ El pipeline las revisa en cada ejecución (`src/health_data/validacion.py`) y gu
 - locality_id es única.
 - Las coordenadas caen en el rectángulo de Sonora.
 - No hay tiempos negativos en primary_time_min ni en secondary_time_min.
-- Consistencia entre niveles (informativa): cuenta en cuántas localidades el hospital queda más cerca que el centro de salud. Que primary_time_min nunca supere a secondary_time_min lo garantiza el cálculo (paso 5).
+- Consistencia entre niveles (informativa): cuenta en cuántas localidades el hospital queda más cerca que el centro de salud. Que primary_time_min nunca supere a secondary_time_min lo garantiza el cálculo (paso 6).
 - Cobertura de SAKBÉ: al menos 70 % de las localidades en ok. Hoy: 98.8 %.
 
 Además, `tests/test_ruteo.py` y `tests/test_analisis.py` prueban el cálculo con datos simulados.
@@ -92,7 +93,8 @@ Además, `tests/test_ruteo.py` y `tests/test_analisis.py` prueban el cálculo co
 - ¿Los tiempos incluyen esperar o ser atendido? No. Son de traslado en automóvil en condiciones óptimas, según SAKBÉ. No incluyen el tiempo dentro del establecimiento, transporte público ni el estado del camino.
 - ¿Por qué tantas localidades con 3 minutos? Porque tienen un centro de salud en la propia localidad o sobre el mismo tramo de carretera; 3 minutos es el mínimo. Son 659 localidades con el 93 % de la población.
 - ¿Por qué primary_time_min es igual a secondary_time_min en 1,025 localidades? Porque el hospital está a la misma distancia o más cerca que el centro de salud, y el hospital también da atención básica. nearest_primary_clues sigue siendo el centro de salud más cercano.
-- ¿Qué tan confiable es el respaldo CONEVAL? Se probó contra las rutas reales, excluyendo a cada localidad de su propia mediana: en localidades a 2 km o más de carretera pavimentada acierta si la localidad supera el umbral en ~91 % de los casos para el hospital y ~84 % para el centro de salud, contra ~72 % de la estimación por línea recta, que subestima unos 40 y 17 minutos.
+- ¿Qué tan confiable es el respaldo CONEVAL? Se probó con validación cruzada contra las rutas reales: en localidades a 2 km o más de carretera pavimentada acierta si la localidad supera el umbral en ~90 % de los casos para el hospital y ~83 % para el centro de salud, contra ~80–82 % de la estimación por línea recta recalibrada y ~72 % de la anterior (factor 1.28 y 35–85 km/h), que subestimaba unos 40 y 17 minutos.
+- ¿Los tiempos reflejan cómo maneja la gente en cada lugar? No. SAKBÉ asigna a cada tramo una velocidad según el tipo de vía, igual en todo el estado. El respaldo con CONEVAL capta en parte las condiciones locales porque usa localidades del mismo municipio.
 - ¿Por qué hay 28 localidades parcial? Sus 2 centros de salud candidatos no se pudieron ubicar en la red de SAKBÉ: 3 establecimientos de Hermosillo sin ningún tramo de calle cerca y los centros de salud de Sásabe y Sáric, para los que SAKBÉ responde vacío con ciertos orígenes. Tienen ruta SAKBÉ al hospital.
 - ¿Cuál es el tiempo más alto? 413 minutos, en Charco de Piedra (Pitiquito), de 1 habitante.
 - ¿Se puede citar? Las condiciones de uso de la API de Ruteo piden citar a INEGI y a la API de Ruteo en todo resultado difundido, por ejemplo: "Fuente: INEGI, API de Ruteo SAKBÉ v3.1 (consultas del 16 al 18 de octubre de 2026)".

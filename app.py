@@ -225,8 +225,8 @@ def aviso_cobertura(resumen: dict[str, float]) -> None:
     st.info(
         f"Tiempos medidos con SAKBÉ en **{resumen['pct_localidades_sakbe']:.1f} %** de las localidades, "
         f"donde vive el **{resumen['pct_poblacion_sakbe']:.1f} %** de la población. "
-        "El resto usa una estimación por línea recta que, en zonas alejadas, ha resultado menor "
-        "que el tiempo real; las cifras de esas localidades pueden aumentar al completar las rutas."
+        "El resto usa el respaldo con CONEVAL (o, si faltan datos, una estimación por línea recta "
+        "calibrada); las cifras de esas localidades pueden cambiar al completar las rutas."
     )
 
 
@@ -437,8 +437,8 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     1. Para cada localidad se eligen los **2 establecimientos operativos más cercanos en línea recta** por nivel de atención.
     2. Con la **API de Ruteo SAKBÉ de INEGI** se mide la ruta por carretera hacia cada uno y se conserva la de menor tiempo.
     3. Si la clínica queda sobre el mismo tramo carretero que la localidad, el traslado se considera local (mínimo 3 min).
-    4. **Sin carretera cercana** (SAKBÉ no encuentra ruta): se asigna el tiempo típico medido con SAKBÉ en las localidades del **mismo municipio y con el mismo grado de aislamiento de CONEVAL** (tiempo al centro de servicios). Si hay menos de 5 localidades así en el municipio, se usa la de todo el estado. Comparado con las rutas reales, acierta si la localidad supera el umbral en ~91 % (hospital) y ~84 % (centro de salud) de los casos en zonas alejadas.
-    5. Las localidades aún no consultadas usan una **estimación**: distancia en línea recta × 1.28 de sinuosidad y velocidades promedio. En zonas alejadas subestima el tiempo real, por lo que solo es provisional.
+    4. **Sin ruta SAKBÉ** (sin carretera cercana, o localidad aún no consultada): se asigna el tiempo típico medido con SAKBÉ en las localidades del **mismo municipio y con el mismo grado de aislamiento de CONEVAL** (tiempo al centro de servicios). Si hay menos de 5 localidades así en el municipio, se usa la de todo el estado. Comparado con las rutas reales, acierta si la localidad supera el umbral en ~90 % (hospital) y ~83 % (centro de salud) de los casos en zonas alejadas.
+    5. Si tampoco hay suficientes rutas medidas para el respaldo, se usa una **estimación**: distancia en línea recta × un factor de rodeo (1.57 al centro de salud, 1.40 al hospital) a velocidades medidas en Sonora (de 37 a 62 km/h según el tramo). Es solo provisional.
 
     Las rutas se consultan de la localidad más poblada a la menos poblada, por lo que la población cubierta avanza más rápido que el número de localidades.
 
@@ -447,7 +447,7 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     | `ok` | Ambos niveles medidos con SAKBÉ |
     | `parcial` | Solo un nivel medido con SAKBÉ |
     | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL (paso 4) |
-    | `estimado` | Aún no consultada; se usa la estimación |
+    | `estimado` | Aún no consultada; tiempo asignado con CONEVAL (o la estimación, si faltan datos) |
 
     La columna *Origen* de las tablas indica, por nivel, si el tiempo viene de **SAKBÉ**, de **CONEVAL** o de la **estimación**.
 

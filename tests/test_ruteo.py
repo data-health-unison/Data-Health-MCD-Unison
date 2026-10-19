@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 from health_data.processing.ruteo import (
     distancia_haversine,
     estimar_velocidad_promedio,
@@ -26,10 +27,21 @@ def test_distancia_haversine_conocida() -> None:
 
 
 def test_estimar_velocidad_promedio() -> None:
-    """Verifica perfiles de velocidad según longitud del trayecto."""
-    distancias = np.array([2.0, 15.0, 40.0, 100.0])
-    velocidades = estimar_velocidad_promedio(distancias)
-    assert list(velocidades) == [35.0, 50.0, 70.0, 85.0]
+    """Velocidades calibradas con rutas SAKBÉ de Sonora, por tramo y nivel de atención."""
+    distancias = np.array([2.0, 5.0, 15.0, 40.0, 100.0])  # 5 km cae en el primer tramo (≤ 5)
+    assert list(estimar_velocidad_promedio(distancias, "primer")) == [37.0, 37.0, 49.0, 48.0, 47.0]
+    assert list(estimar_velocidad_promedio(distancias, "segundo")) == [39.0, 39.0, 51.0, 59.0, 62.0]
+
+
+def test_estimacion_calibrada_por_nivel() -> None:
+    """La distancia estimada usa el factor de rodeo de cada nivel (1.57 y 1.40)."""
+    loc = (np.array([29.0]), np.array([-111.0]))
+    fac = pd.DataFrame({"clues": ["X"], "latitud": [29.2], "longitud": [-111.0]})  # ~22.2 km en línea recta
+    recta = float(distancia_haversine(29.0, -111.0, 29.2, -111.0))
+    _, d1, t1 = emparejar_mas_cercano(*loc, fac, "primer")
+    _, d2, t2 = emparejar_mas_cercano(*loc, fac, "segundo")
+    assert d1[0] == pytest.approx(recta * 1.57, abs=0.01) and d2[0] == pytest.approx(recta * 1.40, abs=0.01)
+    assert t1[0] == pytest.approx(d1[0] / 48 * 60, abs=0.1)  # 34.9 km: tramo 25–60 del 1er nivel → 48 km/h
 
 
 def test_emparejar_mas_cercano() -> None:
@@ -221,7 +233,7 @@ def test_imputar_con_coneval() -> None:
         fila("B", "3 A 4 HRS.", "sin_ruta", 10, 60, "estimado", "estimado"),
         fila("A", "3 A 4 HRS.", "parcial", 5, 60, "sakbe", "estimado"),  # solo falta el 2do nivel
         fila("A", None, "sin_ruta", 10, 60, "estimado", "estimado"),  # sin dato CONEVAL: no cambia
-        fila("A", "3 A 4 HRS.", "estimado", 10, 60, "estimado", "estimado"),  # aún no consultada: no cambia
+        fila("A", "3 A 4 HRS.", "estimado", 10, 60, "estimado", "estimado"),  # aún no consultada: también usa CONEVAL
     ]
     r = imputar_con_coneval(pd.DataFrame(filas), minimo=5)
 
@@ -234,7 +246,7 @@ def test_imputar_con_coneval() -> None:
     assert (parcial.primary_time_min, parcial.primary_method) == (5, "sakbe")  # lo medido no se toca
     assert (parcial.secondary_time_min, parcial.secondary_method) == (172.0, "coneval")
     assert (sin_dato.secondary_time_min, sin_dato.secondary_method) == (60, "estimado")
-    assert (pendiente.secondary_time_min, pendiente.secondary_method) == (60, "estimado")
+    assert (pendiente.secondary_time_min, pendiente.secondary_method) == (172.0, "coneval")
 
 
 def test_imputar_respeta_que_el_1er_nivel_no_supere_al_2do() -> None:
@@ -264,3 +276,18 @@ def test_excluir_localidades() -> None:
     r = excluir_localidades(pop, {"260302192": "isla"})
     assert r["cvegeo"].tolist() == ["260010001"]
     assert excluir_localidades(pop, {}).equals(pop)
+
+
+def test_imputar_sin_rutas_suficientes_conserva_la_estimacion() -> None:
+    """Al inicio de una corrida, con menos de 5 rutas por categoría, no se usan medianas poco confiables."""
+    from health_data.processing.ruteo import imputar_con_coneval
+
+    filas = [
+        {"municipality_name": "A", "tiempo_centro_servicios": "MAS DE 4 HRS.", "routing_status": estado,
+         "primary_time_min": t, "primary_distance_km": 1.0, "primary_method": metodo,
+         "secondary_time_min": t, "secondary_distance_km": 1.0, "secondary_method": metodo}
+        for estado, t, metodo in [("ok", 250.0, "sakbe")] * 3 + [("estimado", 80.0, "estimado")]
+    ]
+    r = imputar_con_coneval(pd.DataFrame(filas), minimo=5)
+    assert (r.iloc[3].secondary_time_min, r.iloc[3].secondary_method) == (80.0, "estimado")
+
