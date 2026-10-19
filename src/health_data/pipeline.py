@@ -74,6 +74,8 @@ def paso_descargas(*, forzar: bool = False) -> dict[str, object]:
                     "bytes": res.bytes_descargados,
                     "reutilizado": res.reutilizado,
                     "ruta": str(res.ruta),
+                    "checksum": res.checksum,
+                    "registrada": res.registrada,
                 }
             except Exception as exc:
                 log.warning("[%s] No se pudo descargar: %s", dataset_id, exc)

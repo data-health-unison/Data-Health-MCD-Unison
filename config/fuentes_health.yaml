@@ -32,6 +32,10 @@ fuentes:
     nombre_archivo: "coneval_gacp2020_localidades.zip"
     estado: "approved"
     prioridad: "alta"
+    institucion: "CONEVAL, coneval.org.mx"
+    formato: "zip"
+    descripcion: "Grado de accesibilidad a carretera pavimentada de cada localidad del país, con sus tres componentes: distancia a carretera pavimentada, tiempo al centro de servicios más cercano y transporte público a la cabecera municipal. Población del Censo 2020."
+    nota: "Publicado el 15/06/2021. Licencia CC BY-NC 2.5 MX: uso no comercial y citando la fuente. CONEVAL desapareció en 2025; si el enlace deja de funcionar, buscar la copia que resguarda el INEGI. Metodología: https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Documento_metodologico_GACP_2020.pdf"
 
   INEGI-POP-001:
     dataset_id: "INEGI-POP-001"
@@ -40,6 +44,10 @@ fuentes:
     nombre_archivo: "iter_26csv20.zip"
     estado: "approved"
     prioridad: "alta"
+    institucion: "INEGI, inegi.org.mx"
+    formato: "zip"
+    descripcion: "Principales resultados por localidad del Censo de Población y Vivienda 2020 para Sonora. Un CSV con una fila por localidad, más los totales del estado y de cada municipio y los acumulados de las localidades de una y dos viviendas."
+    nota: "Las columnas se describen en https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf."
 
   SALUD-001:
     dataset_id: "SALUD-001"
@@ -48,6 +56,10 @@ fuentes:
     nombre_archivo: "ESTABLECIMIENTO_SALUD_202608.xlsx"
     estado: "approved"
     prioridad: "alta"
+    institucion: "Secretaría de Salud, gobi.salud.gob.mx"
+    formato: "xlsx"
+    descripcion: "Catálogo nacional de establecimientos de salud. Una fila por CLUES con institución, tipología, nivel de atención, estatus de operación, domicilio, claves geográficas y coordenadas."
+    nota: "El nombre del archivo dice 202608, pero trae movimientos hasta el 22/09/2026."
 
   INEGI-GEO-001:
     dataset_id: "INEGI-GEO-001"
@@ -56,6 +68,10 @@ fuentes:
     nombre_archivo: "mg2025_26_sonora.zip"
     estado: "approved"
     prioridad: "media"
+    institucion: "INEGI, inegi.org.mx"
+    formato: "zip"
+    descripcion: "Cartografía de Sonora en shapefile: límites del estado y de los municipios, AGEB, localidades amanzanadas (polígonos) y rurales (puntos), manzanas, vialidades y servicios."
+    nota: "Producto 794551163061, con fecha de referencia 31/07/2025 según sus metadatos. Las coordenadas están en metros (EPSG:6372)."
 
   INEGI-ROUTE-001:
     dataset_id: "INEGI-ROUTE-001"

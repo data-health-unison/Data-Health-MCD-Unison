@@ -1,19 +1,6 @@
 """Módulo de ingesta y descarga de datos.
 
-El cliente de SAKBÉ se importa directamente de ``health_data.ingestion.sakbe``
-(no se reexporta aquí para poder ejecutarlo con ``python -m``).
+Los módulos se importan directamente (``health_data.ingestion.descarga`` y
+``health_data.ingestion.sakbe``) y no se reexportan aquí, para poder ejecutarlos
+con ``python -m`` sin el aviso de ``runpy``.
 """
-
-from health_data.ingestion.descarga import (
-    ContenidoInvalido,
-    ErrorDeDescarga,
-    ResultadoDescarga,
-    descargar_dataset,
-)
-
-__all__ = [
-    "descargar_dataset",
-    "ResultadoDescarga",
-    "ErrorDeDescarga",
-    "ContenidoInvalido",
-]

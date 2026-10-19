@@ -70,6 +70,11 @@ class FuenteInfo:
     estado: str = "approved"
     prioridad: str = "alta"
     limite_diario: int | None = None
+    # Para describir la descarga en references/fuentes_descargadas.md
+    institucion: str = ""
+    formato: str = ""
+    descripcion: str = ""
+    nota: str = ""
 
 
 @dataclass(frozen=True)
@@ -152,6 +157,10 @@ def cargar_configuracion(ruta: Path | None = None) -> Configuracion:
             estado=str(f.get("estado", "approved")),
             prioridad=str(f.get("prioridad", "alta")),
             limite_diario=f.get("limite_diario"),
+            institucion=str(f.get("institucion", "")),
+            formato=str(f.get("formato", "")),
+            descripcion=str(f.get("descripcion", "")),
+            nota=str(f.get("nota", "")),
         )
 
     excluidas = {
