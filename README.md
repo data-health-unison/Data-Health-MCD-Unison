@@ -69,11 +69,12 @@ Data-Health-MCD-Unison/
 - Python 3.12
 - pandas y NumPy
 - PyArrow y Parquet
+- GeoPandas
 - Plotly y Streamlit
 - pytest y Ruff
 - Docker y Docker Compose
 
-No se utiliza Django, PostgreSQL, GeoPandas ni Shapely.
+No se utiliza Django ni PostgreSQL.
 
 ## Uso con Docker
 
@@ -137,13 +138,73 @@ routing_status
 
 - [x] Problema y alcance definidos.
 - [x] Estructura Cookiecutter Data Science.
-- [x] Configuración inicial de Docker.
-- [ ] Catálogo de fuentes.
-- [ ] Ingesta de datos.
-- [ ] Limpieza y validación.
-- [ ] Integración con SAKBÉ.
-- [ ] Dataset final.
-- [ ] Dashboard.
+- [x] Configuración de Docker y tablero Streamlit.
+- [x] Catálogo de fuentes e ingesta configurable.
+- [x] Limpieza y validación de ITER, CONEVAL y CLUES.
+- [x] Dataset consolidado por localidad.
+- [x] Cliente de la API SAKBÉ (token, caché, cuota y reintentos).
+- [x] Integración de SAKBÉ en el cálculo de ruteo (consultas en curso).
+- [x] Indicadores de accesibilidad y vulnerabilidad (`src/health_data/analisis.py` y `notebooks/2.0-dd-analisis-accesibilidad.ipynb`).
+- [ ] Validación de tiempos mediante rutas reales.
+
+### API SAKBÉ
+
+El cliente está en `src/health_data/ingestion/sakbe.py`. Requiere un token de
+INEGI ([solicitarlo aquí](https://gaia.inegi.org.mx/sakbe_v3.1/genera_token.jsp)):
+
+```bash
+cp .env.example .env   #colocar SAKBE_TOKENS=<token1>,<token2>
+docker compose run --rm app python -m health_data.ingestion.sakbe           #estado de cuota y caché
+docker compose run --rm app python -m health_data.ingestion.sakbe --probar  #ruta de prueba
+```
+
+- Las respuestas se guardan en `data/interim/sakbe_cache.sqlite`; una consulta
+  repetida (incluso si no hubo ruta) no vuelve a gastar cuota.
+- Cada petición real se contabiliza por día y por token. Al llegar a
+  `limite_diario` (`config/fuentes_health.yaml`, 2500 por omisión), o si el
+  servidor rechaza un token, el cliente pasa al siguiente. Cuando todos se
+  agotan se detiene con `SakbeCuotaAgotada`.
+- Cada ruta guarda su fecha de consulta (`consultado_en`), ya que la red se
+  actualiza cada año.
+
+### Estado actual del ruteo
+
+Para cada localidad se eligen los **2 establecimientos más cercanos en línea
+recta** por nivel de atención y se mide con SAKBÉ la ruta real por carretera a
+cada uno; se conserva el de menor tiempo. Las localidades se procesan de mayor a
+menor población.
+
+```bash
+make rutas         # consulta SAKBÉ hasta agotar la cuota del día; reanudable
+make data          # reconstruye la tabla usando solo rutas en caché (sin gastar cuota)
+```
+
+Completar las ~7,300 localidades requiere unas 37,000 consultas (~5 días con 3
+tokens). Mientras tanto, las localidades sin ruta conservan la estimación por
+línea recta, factor de sinuosidad y velocidad promedio. La columna
+`routing_status` indica el origen de cada fila:
+
+| Valor | Significado |
+|---|---|
+| `ok` | Ambos niveles medidos con SAKBÉ |
+| `parcial` | Solo un nivel medido con SAKBÉ |
+| `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
+| `estimado` | Aún no consultada; se usa la estimación |
+
+**Localidades excluidas.** Las 3 localidades de la Isla del Tiburón (16 habitantes) se excluyen del ruteo y
+del análisis: no tienen acceso por carretera y parecen campamentos de pesca, no localidades permanentes. La
+lista y el motivo están en `config/fuentes_health.yaml` (`localidades_excluidas`).
+
+**Respaldo con CONEVAL.** A los niveles sin ruta SAKBÉ de las localidades `sin_ruta` y `parcial` se les
+asigna la mediana del tiempo y la distancia medidos con SAKBÉ en las localidades del mismo municipio y con la
+misma categoría de tiempo al centro de servicios de CONEVAL (si son menos de 5, la mediana estatal de esa
+categoría). Validado contra las rutas reales excluyendo a cada localidad de su mediana: en localidades a 2 km
+o más de carretera pavimentada acierta el lado del umbral en ~91 % (hospital, 120 min) y ~84 % (centro de
+salud, 60 min), contra ~72 % de la estimación por línea recta, que subestima ~40 y ~17 min.
+
+`primary_method` y `secondary_method` indican `sakbe`, `coneval` o `estimado` por nivel, y
+`routing_consulted_at` la fecha de consulta. La validación
+`cobertura_ruteo_sakbe` exige al menos 70 % de localidades en `ok`.
 
 ## Alcance y limitaciones
 

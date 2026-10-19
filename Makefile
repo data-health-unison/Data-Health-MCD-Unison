@@ -2,14 +2,15 @@ PYTHON ?= $(shell which python3.12 2>/dev/null || which python3)
 VENV   := .venv
 PY     := $(VENV)/bin/python
 
-.PHONY: help install venv data download app test lint fmt clean clean-data \
-        docker-build docker-app docker-data docker-download docker-test docker-lint \
+.PHONY: help install venv data rutas download app test lint fmt clean clean-data \
+        docker-build docker-app docker-data docker-rutas docker-download docker-test docker-lint \
         docker-shell docker-down
 
 help:
 	@echo "Comandos locales:"
 	@echo "  make install       Crea el entorno e instala dependencias"
 	@echo "  make data          Ejecuta el pipeline"
+	@echo "  make rutas         Consulta SAKBÉ (gasta cuota; reanudable)"
 	@echo "  make download      Descarga una fuente (FUENTE=SALUD-001)"
 	@echo "  make app           Levanta el tablero Streamlit"
 	@echo "  make test          Ejecuta las pruebas"
@@ -20,6 +21,7 @@ help:
 	@echo "  make docker-build  Construye la imagen"
 	@echo "  make docker-app    Levanta Streamlit"
 	@echo "  make docker-data   Ejecuta el pipeline"
+	@echo "  make docker-rutas  Consulta SAKBÉ"
 	@echo "  make docker-download Descarga una fuente (FUENTE=SALUD-001)"
 	@echo "  make docker-test   Ejecuta las pruebas"
 	@echo "  make docker-lint   Revisa el código"
@@ -38,6 +40,9 @@ install: venv
 
 data: install
 	PYTHONPATH=src $(PY) -m health_data.pipeline
+
+rutas: install
+	PYTHONPATH=src $(PY) -m health_data.processing.ruteo --sakbe
 
 download: install
 	PYTHONPATH=src $(PY) -m health_data.ingestion.descarga $(FUENTE)
@@ -67,6 +72,9 @@ clean-data:
 
 docker-build:
 	docker compose build
+
+docker-rutas:
+	docker compose run --rm app python -m health_data.processing.ruteo --sakbe
 
 docker-app:
 	docker compose up --build app
