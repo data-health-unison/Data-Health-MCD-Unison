@@ -10,6 +10,7 @@
 # - GeoPandas permite leer los shapefiles del Marco Geoestadístico.
 # - Los mapas se construirán con Plotly a partir de GeoJSON.
 # - PyArrow permite leer y escribir archivos Parquet.
+# - xlrd lee el .xls del índice de marginación de CONAPO (CONAPO-MARG-001).
 # - Kaleido exporta las gráficas de Plotly a PNG (reports/figures); 0.2.1 es la compatible con Plotly 5.
 
 pandas==2.2.3
@@ -22,6 +23,7 @@ requests==2.32.3
 PyYAML==6.0.2
 geopandas==1.1.4
 openpyxl==3.1.5
+xlrd==2.0.1
 
 # Desarrollo y pruebas
 pytest==8.3.4

@@ -73,6 +73,20 @@ fuentes:
     descripcion: "Cartografía de Sonora en shapefile: límites del estado y de los municipios, AGEB, localidades amanzanadas (polígonos) y rurales (puntos), manzanas, vialidades y servicios."
     nota: "Producto 794551163061, con fecha de referencia 31/07/2025 según sus metadatos. Las coordenadas están en metros (EPSG:6372)."
 
+  CONAPO-MARG-001:
+    dataset_id: "CONAPO-MARG-001"
+    nombre: "Índice de marginación por localidad 2020 (IML)"
+    url: "https://conapo.segob.gob.mx/work/models/CONAPO/Datos_Abiertos/Localidad/IML_2020.zip"
+    nombre_archivo: "conapo_iml2020_localidades.zip"
+    # Experimental (rama exp/indice-marginacion): falta la revisión de otro integrante. Para descargarla
+    # con `make download` hay que pasarla a approved.
+    estado: "proposed"
+    prioridad: "media"
+    institucion: "CONAPO, gob.mx/conapo"
+    formato: "zip"
+    descripcion: "Índice y grado de marginación 2020 de cada localidad del país con 3 viviendas habitadas o más, con sus ocho indicadores (analfabetismo, educación básica, drenaje, electricidad, agua, piso de tierra, hacinamiento y refrigerador). Las localidades de 1 y 2 viviendas vienen agregadas por municipio en otra hoja. Un .xls dentro del zip."
+    nota: "Página: https://www.gob.mx/conapo/documentos/indices-de-marginacion-2020-284372. Método DP2: un índice MAYOR indica MENOR marginación; el normalizado (IMN_2020) va de 0 a 1 en el mismo sentido. Calculado con el Censo 2020, igual que ITER."
+
   INEGI-ROUTE-001:
     dataset_id: "INEGI-ROUTE-001"
     nombre: "SAKBÉ - API de Ruteo Red Carretera INEGI"
