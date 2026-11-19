@@ -10,7 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 import health_data.config as config
 from health_data.processing import cartografia
-from health_data.visualization import complementarias
+from health_data.visualization import calidad, complementarias
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
 PAGINAS = [
@@ -88,6 +88,22 @@ def test_vistas_sin_errores(tablero, pagina, nivel) -> None:
     at = _ejecutar(pagina, nivel)
     assert not at.exception, [e.value for e in at.exception]
     assert not at.error, [e.value for e in at.error]
+
+
+def test_calidad_filtra_padron_con_metodos_mezclados(tablero) -> None:
+    tabla = _tabla()
+    tabla.loc[1, "secondary_method"] = "coneval"
+    tablero(tabla)
+    at = AppTest.from_file(APP).run()
+    at.sidebar.radio[0].set_value(calidad.PAGINA).run()
+    assert not at.exception
+    assert len(at.metric) == 8
+    at.selectbox[0].set_value("A")
+    at.selectbox[1].set_value("coneval")
+    at.run()
+    assert not at.exception
+    assert at.dataframe[0].value["locality_id"].tolist() == ["260010002"]
+    assert at.get("download_button")
 
 
 def test_panorama_indicadores_y_umbrales(tablero) -> None:

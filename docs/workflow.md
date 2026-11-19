@@ -74,6 +74,37 @@ jupyter lab
 La tabla de accesibilidad registra el método utilizado en cada localidad. Si la caché
 de SAKBÉ no está disponible, el ruteo del proyecto puede generar tiempos estimados.
 La libreta muestra la cobertura por método para interpretar sus resultados.
+
+### Auditoría local y sensibilidad de los tiempos
+
+Con las dependencias del proyecto instaladas y desde la raíz del checkout que
+contiene los datos, ejecute:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m health_data.auditoria
+```
+
+`--raiz` permite señalar otro directorio del proyecto con datos y catálogo, y
+`--salida` permite cambiar el directorio de salida. Por omisión, se generan
+`data/processed/calidad/calidad_y_cobertura.json` y, cuando existe la tabla
+de accesibilidad, `padron_provisional_ruteo.csv`. La auditoría funciona sin red.
+
+El JSON inventaría los insumos, registra los faltantes del catálogo, coteja las
+huellas de los archivos crudos y revisa las tablas procesadas por clave, cobertura
+municipal, nulos, duplicados y rangos aplicables. Los conteos en bruto describen
+los componentes del contenedor y se interpretan según la unidad indicada.
+El informe de cruces conserva claves de ambos lados y muestra el tamaño
+esperado del cruce izquierdo. CLUES puede tener varias unidades por localidad,
+y urgencias puede repetir CLUES en distintos periodos. Las diferencias en
+coordenadas se comparan entre tablas de localidades con una tolerancia de
+0.0001 grados. Las exclusiones configuradas se listan explícitamente.
+
+La vista **Calidad de datos** muestra la procedencia por nivel, filtros de
+municipio y método y descarga del padrón provisional. El padrón tiene una fila
+por localidad y nivel que requiere revisión. La libreta
+[`3.3-eda-sensibilidad-ruteo.ipynb`](../notebooks/3.3-eda-sensibilidad-ruteo.ipynb)
+evalúa cómo cambia la clasificación al variar los umbrales de 60 y 120 minutos.
 La primera ejecución de la libreta vial extrae el GeoPackage en `data/interim/`
 y necesita unos 2.4 GB de espacio adicional.
 

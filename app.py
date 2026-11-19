@@ -20,7 +20,7 @@ if str(_RAIZ) not in sys.path:
 
 from health_data import analisis, config  # noqa: E402
 from health_data.processing import cartografia  # noqa: E402
-from health_data.visualization import complementarias, mapas  # noqa: E402
+from health_data.visualization import calidad, complementarias, mapas  # noqa: E402
 
 log = logging.getLogger("health_data.tablero")
 
@@ -38,6 +38,7 @@ PAGINAS = [
     complementarias.TRANSPORTE,
     complementarias.URGENCIAS,
     complementarias.RED_VIAL,
+    calidad.PAGINA,
     "🔍 Metodología y fuentes",
 ]
 NIVELES = {
@@ -157,7 +158,7 @@ def barra_lateral(
         )
 
         pagina = st.radio("Vista", PAGINAS, index=0)
-        if pagina in (complementarias.URGENCIAS, complementarias.RED_VIAL):
+        if pagina in (complementarias.URGENCIAS, complementarias.RED_VIAL, calidad.PAGINA):
             return {"pagina": pagina}
 
         st.divider()
@@ -504,6 +505,9 @@ def main() -> None:
 
     controles = barra_lateral(tabla, cfg)
     pagina = controles["pagina"]
+    if pagina == calidad.PAGINA:
+        calidad.vista(tabla)
+        return
     if pagina == complementarias.URGENCIAS:
         complementarias.vista_urgencias()
         return
