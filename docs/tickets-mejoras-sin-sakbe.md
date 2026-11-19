@@ -5,7 +5,7 @@ modifican rutas históricas ni convierten estimaciones en mediciones.
 
 ## TICKET-DATA-001 — Reporte automatizado de calidad y cobertura
 
-**Prioridad:** Alta  
+**Prioridad:** Alta
 **Objetivo:** producir un reporte único por fuente con filas, periodo, claves,
 nulos, duplicados, coordenadas fuera de rango y cobertura territorial.
 
@@ -18,7 +18,7 @@ nulos, duplicados, coordenadas fuera de rango y cobertura territorial.
 
 ## TICKET-ROUTING-001 — Padrón de localidades con incertidumbre
 
-**Prioridad:** Alta  
+**Prioridad:** Alta
 **Objetivo:** generar un padrón provisional de localidades cuyos tiempos no son
 medidos con SAKBÉ.
 
@@ -32,7 +32,7 @@ medidos con SAKBÉ.
 
 ## TICKET-ROUTING-002 — Análisis de sensibilidad de umbrales
 
-**Prioridad:** Alta  
+**Prioridad:** Alta
 **Objetivo:** cuantificar cuánto cambia la clasificación de accesibilidad cuando
 se comparan los tiempos disponibles y sus respaldos.
 
@@ -45,7 +45,7 @@ se comparan los tiempos disponibles y sus respaldos.
 
 ## TICKET-DASH-001 — Vista de calidad de datos en el tablero
 
-**Prioridad:** Media  
+**Prioridad:** Media
 **Objetivo:** mostrar al usuario qué parte del resultado es medida, imputada o
 estimada.
 
@@ -58,7 +58,7 @@ estimada.
 
 ## TICKET-DATA-002 — Revisión de correspondencias entre fuentes
 
-**Prioridad:** Media  
+**Prioridad:** Media
 **Objetivo:** detectar localidades o establecimientos que no encuentran
 correspondencia entre población, RESLOC, CONAPO, CONEVAL y salud.
 
@@ -71,7 +71,7 @@ correspondencia entre población, RESLOC, CONAPO, CONEVAL y salud.
 
 ## TICKET-TEST-001 — Pruebas de regresión para calidad y cobertura
 
-**Prioridad:** Media  
+**Prioridad:** Media
 **Objetivo:** evitar que nuevas ingestas oculten problemas de cobertura o
 procedencia de los tiempos.
 
