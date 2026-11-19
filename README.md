@@ -28,6 +28,9 @@ Los resultados se relacionarán con población, edad, discapacidad, movilidad y 
 Cada fuente tiene su diccionario en `references/`. Las descargas quedan registradas, con su huella SHA-256, en
 `catalog/ingestions.csv`, y descritas en `references/fuentes_descargadas.md`.
 
+El flujo de [fuentes complementarias](docs/workflow.md#fuentes-complementarias-para-el-eda-de-accesibilidad)
+prepara las tablas de transporte público y marginación por localidad para el EDA.
+
 ## Flujo de datos
 
 ```text

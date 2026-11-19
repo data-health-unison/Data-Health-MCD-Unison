@@ -56,13 +56,18 @@ def paso_cartografia(*, forzar: bool = False) -> None:
 
 
 def paso_descargas(*, forzar: bool = False) -> dict[str, object]:
-    """Descarga las fuentes aprobadas registradas en la configuración."""
+    """Descarga las fuentes aprobadas habilitadas para el flujo general."""
     log.info("=== Paso: Descarga de fuentes ===")
     cfg = cargar_configuracion()
     resultados = {}
 
     for dataset_id, fuente in cfg.fuentes.items():
-        if fuente.estado == "approved" and fuente.url and fuente.nombre_archivo:
+        if (
+            fuente.estado == "approved"
+            and fuente.descarga_automatica
+            and fuente.url
+            and fuente.nombre_archivo
+        ):
             try:
                 res = descargar_dataset(
                     dataset_id=dataset_id,
@@ -97,6 +102,22 @@ def paso_ruteo() -> None:
         proc_ruteo()
     except Exception as exc:
         log.warning("No se pudo ejecutar ruteo: %s", exc)
+
+
+def paso_fuentes_complementarias(*, forzar: bool = False) -> None:
+    """Prepara las tablas por localidad para el EDA de movilidad y marginación."""
+    from health_data.processing import conapo_marg_001, inegi_resloc_001
+
+    for modulo in (inegi_resloc_001, conapo_marg_001):
+        crudo = RAW_DATA_DIR / modulo.ARCHIVO_CRUDO.name
+        salida = PROCESSED_DATA_DIR / modulo.ARCHIVO_SALIDA.name
+        if not crudo.exists():
+            continue
+        try:
+            if forzar or not salida.exists() or crudo.stat().st_mtime_ns > salida.stat().st_mtime_ns:
+                modulo.main(ruta_cruda=crudo, ruta_salida=salida)
+        except Exception as exc:
+            log.warning("No se pudo preparar %s: %s", crudo.name, exc)
 
 
 def paso_validacion(ruta: Path | None = None) -> ReporteValidacion | None:
@@ -142,7 +163,7 @@ def guardar_manifiesto(
         "argumentos": args,
         "descargas": descargas,
         "archivos_salida": {
-            "tabla_final": str(ARCHIVO_TABLA_FINAL.relative_to(PROJECT_ROOT))
+            "tabla_final": ARCHIVO_TABLA_FINAL.relative_to(PROJECT_ROOT).as_posix()
             if ARCHIVO_TABLA_FINAL.exists()
             else None,
         },
@@ -220,6 +241,8 @@ def run_pipeline(*, forzar: bool = False, solo_descarga: bool = False) -> None:
             proc_salud()
         except Exception as exc:
             log.warning("No se pudo ejecutar salud_001: %s", exc)
+
+    paso_fuentes_complementarias(forzar=forzar)
 
     # 3.4 Ruteo y Accesibilidad a Centros de Salud
     if archivo_iter_proc.exists() and archivo_salud_proc.exists():

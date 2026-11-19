@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 import health_data.config as config
 from health_data.processing import cartografia
+from health_data.visualization import complementarias
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
 PAGINAS = [
@@ -99,6 +100,38 @@ def test_panorama_indicadores_y_umbrales(tablero) -> None:
     # Con umbral de 2do nivel en 45 min entra también Ejido (50 min)
     at = _ejecutar("🗺️ Panorama", slider1=45)
     assert {m.label: m.value for m in at.metric}["Población con acceso comprometido"] == "350"
+
+
+def test_urgencias_funciona_sin_tabla_de_accesibilidad(tablero) -> None:
+    ruta = tablero(None).parent
+    pd.DataFrame({
+        "periodo": pd.to_datetime(["2021-01-01", "2022-01-01"]),
+        "municipio": ["A", "B"], "clues": ["H1", "H2"],
+        "establecimiento": ["Hospital A", "Hospital B"], "urgencias": [15, 30],
+    }).to_parquet(ruta / "urgencias_mensuales.parquet")
+    at = _ejecutar(complementarias.URGENCIAS)
+    assert not at.exception
+    assert at.metric[0].value == "45"
+    at.multiselect[0].set_value(["A"]).run()
+    assert not at.exception
+    assert at.metric[0].value == "15"
+
+
+def test_transporte_usa_el_umbral_hospitalario(tablero) -> None:
+    ruta = tablero(_tabla()).parent
+    pd.DataFrame({
+        "cvegeo": ["260010002", "260020001"], "transporte_foraneo": ["NO", "NO"],
+        "tiempo_cabecera_min": [None, None], "frecuencia_salidas_cabecera": [None, None],
+    }).to_parquet(ruta / "inegi-resloc-001_localidades.parquet")
+    pd.DataFrame({
+        "cvegeo": ["260020001"], "grado_marginacion": ["ALTO"],
+    }).to_parquet(ruta / "conapo-marg-001_localidades.parquet")
+    at = _ejecutar(complementarias.TRANSPORTE, slider1=75)
+    assert not at.exception
+    assert at.metric[0].value == "250"
+    at.sidebar.selectbox[0].set_value("B").run()
+    assert not at.exception
+    assert at.metric[0].value == "200"
 
 
 def test_cita_de_fuentes_con_fechas_de_consulta(tablero) -> None:

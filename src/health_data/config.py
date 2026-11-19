@@ -75,6 +75,7 @@ class FuenteInfo:
     formato: str = ""
     descripcion: str = ""
     nota: str = ""
+    descarga_automatica: bool = True
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,7 @@ def cargar_configuracion(ruta: Path | None = None) -> Configuracion:
             formato=str(f.get("formato", "")),
             descripcion=str(f.get("descripcion", "")),
             nota=str(f.get("nota", "")),
+            descarga_automatica=f.get("descarga_automatica", True),
         )
 
     excluidas = {

@@ -20,7 +20,7 @@ if str(_RAIZ) not in sys.path:
 
 from health_data import analisis, config  # noqa: E402
 from health_data.processing import cartografia  # noqa: E402
-from health_data.visualization import mapas  # noqa: E402
+from health_data.visualization import complementarias, mapas  # noqa: E402
 
 log = logging.getLogger("health_data.tablero")
 
@@ -35,6 +35,9 @@ PAGINAS = [
     "📍 Localidades prioritarias",
     "👥 Grupos vulnerables",
     "📋 Tabla de localidades",
+    complementarias.TRANSPORTE,
+    complementarias.URGENCIAS,
+    complementarias.RED_VIAL,
     "🔍 Metodología y fuentes",
 ]
 NIVELES = {
@@ -154,6 +157,8 @@ def barra_lateral(
         )
 
         pagina = st.radio("Vista", PAGINAS, index=0)
+        if pagina in (complementarias.URGENCIAS, complementarias.RED_VIAL):
+            return {"pagina": pagina}
 
         st.divider()
         nivel = st.radio(
@@ -496,10 +501,22 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
 def main() -> None:
     cfg = config.cargar_configuracion()
     tabla = cargar_datos_procesados()
-    geojson = cargar_geojson_sonora()
-    manifiesto = cargar_manifiesto()
 
     controles = barra_lateral(tabla, cfg)
+    pagina = controles["pagina"]
+    if pagina == complementarias.URGENCIAS:
+        complementarias.vista_urgencias()
+        return
+    if pagina == complementarias.RED_VIAL:
+        complementarias.vista_red_vial()
+        return
+    if controles["municipio"] != "Todos":
+        tabla = tabla[tabla["municipality_name"] == controles["municipio"]].copy()
+    if pagina == complementarias.TRANSPORTE:
+        complementarias.vista_transporte(tabla, controles["umbral_segundo"])
+        pie_de_fuentes(tabla)
+        return
+
 
     # Si aún no hay datos generados en data/processed, mostrar pantalla de bienvenida defensiva
     if tabla.empty:
@@ -532,17 +549,12 @@ def main() -> None:
         )
         return
 
-    # Si hay filtro de municipio aplicado
-    if controles["municipio"] != "Todos":
-        tabla = tabla[tabla["municipality_name"] == controles["municipio"]].copy()
-
     nivel = NIVELES[str(controles["nivel"])]
     umbrales = {
         "umbral_primer": controles["umbral_primer"],
         "umbral_segundo": controles["umbral_segundo"],
         "umbrales": cfg.umbrales,
     }
-    pagina = controles["pagina"]
 
     # Si la tabla actual es solo el intermedio de CONEVAL (sin ruteo aún)
     tiene_ruteo = {"primary_time_min", "secondary_time_min"}.issubset(tabla.columns)
@@ -566,7 +578,7 @@ def main() -> None:
     if pagina == "🗺️ Panorama":
         vista_panorama(tabla, controles, umbrales, nivel)
     elif pagina == "📊 Municipios":
-        vista_municipios(tabla, controles, umbrales, nivel, geojson)
+        vista_municipios(tabla, controles, umbrales, nivel, cargar_geojson_sonora())
     elif pagina == "📍 Localidades prioritarias":
         vista_prioritarias(tabla, umbrales)
     elif pagina == "👥 Grupos vulnerables":
@@ -574,7 +586,7 @@ def main() -> None:
     elif pagina == "📋 Tabla de localidades":
         vista_tabla(tabla)
     elif pagina == "🔍 Metodología y fuentes":
-        vista_metodologia(tabla, cfg, manifiesto)
+        vista_metodologia(tabla, cfg, cargar_manifiesto())
 
     pie_de_fuentes(tabla)
 
