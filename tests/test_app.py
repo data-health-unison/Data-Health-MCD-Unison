@@ -93,7 +93,7 @@ def test_vistas_sin_errores(tablero, pagina, nivel) -> None:
 def test_calidad_filtra_padron_con_metodos_mezclados(tablero) -> None:
     tabla = _tabla()
     tabla.loc[1, "secondary_method"] = "coneval"
-    tablero(tabla)
+    ruta = tablero(tabla)
     at = AppTest.from_file(APP).run()
     at.sidebar.radio[0].set_value(calidad.PAGINA).run()
     assert not at.exception
@@ -104,6 +104,10 @@ def test_calidad_filtra_padron_con_metodos_mezclados(tablero) -> None:
     assert not at.exception
     assert at.dataframe[0].value["locality_id"].tolist() == ["260010002"]
     assert at.get("download_button")
+    tabla.loc[1, "secondary_time_min"] = 95.0
+    tabla.to_parquet(ruta)
+    at.run()
+    assert at.dataframe[0].value["tiempo_min"].tolist() == [95.0]
 
 
 def test_panorama_indicadores_y_umbrales(tablero) -> None:

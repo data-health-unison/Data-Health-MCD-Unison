@@ -227,10 +227,14 @@ columna `routing_status` indica el origen de cada fila:
 
 | Valor | Significado |
 |---|---|
-| `ok` | Ambos niveles medidos con SAKBÉ |
+| `ok` | Ambos niveles cubiertos con SAKBÉ, incluidos los trayectos locales aproximados entre tramos |
 | `parcial` | Solo un nivel medido con SAKBÉ (SAKBÉ no ubica en su red a los candidatos del otro); el otro, con CONEVAL |
 | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
 | `estimado` | Aún no consultada; tiempo asignado con CONEVAL (o la estimación, si faltan datos) |
+
+La reconstrucción con la caché histórica confirmó **cero consultas pendientes**.
+El [cierre del ruteo](docs/casos-ruteo-sin-cobertura.md) registra la clave, el
+nivel afectado, el motivo y la fecha de consulta de cada una de las 58 localidades.
 
 **Localidades excluidas.** Las 3 localidades de la Isla del Tiburón (16 habitantes) se excluyen del ruteo y
 del análisis: no tienen acceso por carretera y parecen campamentos de pesca, no localidades permanentes. La

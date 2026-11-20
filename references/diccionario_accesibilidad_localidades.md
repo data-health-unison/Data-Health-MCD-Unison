@@ -7,7 +7,7 @@ Accesibilidad geográfica a servicios de salud de cada localidad de Sonora: el e
 - Archivo procesado: `data/processed/accesibilidad_localidades.parquet`
 - Generación sin consultar SAKBÉ (usa solo las rutas en caché): `make data`, o `PYTHONPATH=src python -m health_data.processing.ruteo`
 - Consulta de rutas faltantes a SAKBÉ (gasta cuota): `make rutas`, o `PYTHONPATH=src python -m health_data.processing.ruteo --sakbe`
-- Caché de rutas: `data/interim/sakbe_cache.sqlite`. Requiere tokens en `.env` (ver `.env.example`).
+- Caché de rutas: `data/interim/sakbe_cache.sqlite`. Las consultas nuevas requieren tokens en `.env` (ver `.env.example`).
 - Fechas de consulta a SAKBÉ: del 16/10/2026 al 18/10/2026.
 
 ## Selección de registros
@@ -44,7 +44,10 @@ Accesibilidad geográfica a servicios de salud de cada localidad de Sonora: el e
 | secondary_time_min | decimal | Tiempo de traslado en automóvil al 2do nivel, en minutos. | 3 a 413. Mediana 33.1. | SAKBÉ o respaldo CONEVAL |
 | secondary_method | texto | Origen del tiempo al 2do nivel. | sakbe (7,241), coneval (56). | Derivada |
 | routing_status | texto | Origen de los tiempos de la localidad. | ok (7,239): ambos niveles por SAKBÉ. parcial (2): solo un nivel por SAKBÉ y el otro por CONEVAL. sin_ruta (56): ningún nivel por SAKBÉ; ambos por CONEVAL. estimado: aún no consultada; usa CONEVAL o la estimación (ninguna en la tabla actual). | Derivada |
-| routing_consulted_at | texto | Fecha y hora de la consulta a SAKBÉ más reciente entre los dos niveles (ISO 8601). | 16/10/2026 a 18/10/2026. Vacía en las 56 sin_ruta. | SAKBÉ |
+| routing_consulted_at | texto | Fecha y hora de la evidencia SAKBÉ del resultado exitoso más reciente entre los dos niveles (ISO 8601). | 16/10/2026 a 18/10/2026. Vacía en las 56 sin_ruta. | SAKBÉ |
+| primary_sakbe_status / secondary_sakbe_status | texto | Resultado de la búsqueda de ruta por nivel. | `ok`, `sin_ruta`, `pendiente`. | Derivada |
+| primary_sakbe_reason / secondary_sakbe_reason | texto | Tipo de evidencia o motivo del resultado por nivel. | `ruta_optima`, `trayecto_local`, `origen_sin_tramo`, `candidatos_sin_ruta`, `consulta_incompleta`. | Derivada |
+| primary_sakbe_consulted_at / secondary_sakbe_consulted_at | texto | Fecha y hora de la evidencia por nivel. En casos sin ruta registra la última respuesta sin resultado. | ISO 8601 o vacía si no hay evidencia. | SAKBÉ |
 | disponibilidad | texto | Si ITER publica los indicadores de la localidad. | COMPLETA (1,853), CONFIDENCIAL (5,413), NO DISPONIBLE (31). | INEGI-POP-001 |
 | poblacion_60_y_mas | entero | Personas de 60 años y más. | 0 a 97,155. Vacía en 5,444. | INEGI-POP-001 |
 | pct_60_y_mas | decimal | Porcentaje de personas de 60 años y más. | 0 a 100. Vacío en 5,444. | INEGI-POP-001 |

@@ -33,3 +33,12 @@ def test_validar_tabla_correcta() -> None:
     rep = validar_tabla_final(datos)
     assert rep.paso
     assert len(rep.fallidas) == 0
+
+    # Una búsqueda sin ruta conserva su motivo y la fecha de la respuesta.
+    datos["primary_method"] = ["sakbe", "coneval"]
+    datos["primary_sakbe_status"] = ["ok", "sin_ruta"]
+    datos["primary_sakbe_reason"] = ["ruta_optima", "origen_sin_tramo"]
+    datos["primary_sakbe_consulted_at"] = ["2026-10-16T11:00:00", ""]
+    assert [c.nombre for c in validar_tabla_final(datos).fallidas] == ["trazabilidad_sakbe_primary"]
+    datos.loc[1, "primary_sakbe_consulted_at"] = "2026-10-17T11:00:00"
+    assert validar_tabla_final(datos).paso

@@ -93,18 +93,24 @@ st.set_page_config(
 
 
 @st.cache_data(show_spinner=False)
+def _leer_accesibilidad(ruta: Path, mtime_ns: int) -> pd.DataFrame:
+    """Recarga el parquet cuando el pipeline escribe una nueva versión."""
+    return pd.read_parquet(ruta)
+
+
 def cargar_datos_procesados() -> pd.DataFrame:
     """Carga la tabla final consolidada si existe, o el intermedio disponible."""
     # 1. Tabla final completa de ruteo
     if config.ARCHIVO_TABLA_FINAL.exists():
-        return pd.read_parquet(config.ARCHIVO_TABLA_FINAL)
+        ruta = config.ARCHIVO_TABLA_FINAL
+        return _leer_accesibilidad(ruta, ruta.stat().st_mtime_ns)
 
     # 2. Respaldo intermedio CONEVAL-ACC-001 si ya fue generado
     archivo_coneval = (
         config.PROCESSED_DATA_DIR / "coneval-acc-001_localidades.parquet"
     )
     if archivo_coneval.exists():
-        df = pd.read_parquet(archivo_coneval)
+        df = _leer_accesibilidad(archivo_coneval, archivo_coneval.stat().st_mtime_ns)
         # Asegurar columnas mínimas para demostración si aún no hay ruteo
         if "municipality_name" not in df.columns and "municipio" in df.columns:
             df["municipality_name"] = df["municipio"]

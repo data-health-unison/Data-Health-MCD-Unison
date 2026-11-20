@@ -173,6 +173,7 @@ class ResultadoRuta:
     distancia_km: float = float("nan")
     tiempo_min: float = float("nan")
     consultado_en: str = ""
+    motivo: str = ""
 
 
 def candidatos_mas_cercanos(
@@ -241,8 +242,10 @@ def mejor_ruta_sakbe(
     necesarios = len(candidatos) if necesarios is None else necesarios
     try:
         origen = _llamar(cliente, cliente.buscar_linea, lat, lon)
-    except SakbeSinRuta:
-        return ResultadoRuta(ESTADO_SIN_RUTA)
+    except SakbeSinRuta as exc:
+        return ResultadoRuta(
+            ESTADO_SIN_RUTA, consultado_en=exc.consultado_en, motivo="origen_sin_tramo"
+        )
     except SakbeCuotaAgotada as exc:
         _pausar_consultas(cliente, str(exc))
         return ResultadoRuta(ESTADO_PENDIENTE)
@@ -253,24 +256,31 @@ def mejor_ruta_sakbe(
         return ResultadoRuta(ESTADO_PENDIENTE)
 
     mejor: ResultadoRuta | None = None
+    ultimo_fallo = ""
     pendiente = False
     ocupados = 0  #candidatos medidos o pendientes; los que no tienen ruta no cuentan
     for clues, lat_f, lon_f in candidatos:
         if ocupados >= necesarios:
             break
+        motivo = "ruta_optima"
         try:
             destino = _llamar(cliente, cliente.buscar_linea, lat_f, lon_f)
             if destino.id_routing_net == origen.id_routing_net:
                 #SAKBÉ no calcula rutas dentro de un mismo tramo: trayecto local
                 distancia, tiempo, consultado_en = _trayecto_local(lat, lon, lat_f, lon_f)
+                consultado_en = max(origen.consultado_en, destino.consultado_en)
+                motivo = "trayecto_local"
             else:
                 ruta = _llamar(cliente, cliente.calcular_ruta, origen, destino)
                 distancia, tiempo, consultado_en = ruta.long_km, ruta.tiempo_min, ruta.consultado_en
         except SakbeSinRuta as exc:
             if not _es_mismo_origen_destino(exc):
+                ultimo_fallo = max(ultimo_fallo, exc.consultado_en)
                 continue
             #Tramos distintos que SAKBÉ considera el mismo punto (comparten nodo): trayecto local
             distancia, tiempo, consultado_en = _trayecto_local(lat, lon, lat_f, lon_f)
+            consultado_en = exc.consultado_en
+            motivo = "trayecto_local"
         except (SakbeCuotaAgotada, SakbeConexionError) as exc:
             _pausar_consultas(cliente, str(exc))
             pendiente, ocupados = True, ocupados + 1
@@ -294,11 +304,14 @@ def mejor_ruta_sakbe(
                 distancia_km=round(distancia, 2),
                 tiempo_min=round(tiempo, 1),
                 consultado_en=consultado_en,
+                motivo=motivo,
             )
 
     if pendiente:
-        return ResultadoRuta(ESTADO_PENDIENTE)
-    return mejor or ResultadoRuta(ESTADO_SIN_RUTA)
+        return ResultadoRuta(ESTADO_PENDIENTE, motivo="consulta_incompleta")
+    return mejor or ResultadoRuta(
+        ESTADO_SIN_RUTA, consultado_en=ultimo_fallo, motivo="candidatos_sin_ruta"
+    )
 
 
 def rutear_con_sakbe(
@@ -505,6 +518,7 @@ def consolidar_dataset_final(
     estado = np.full(len(pop), "estimado", dtype=object)
     consultado_en = np.full(len(pop), "", dtype=object)
     pendientes = len(pop)
+    resultados_nivel = {}
     if cliente is not None:
         rutas = rutear_con_sakbe(
             pop,
@@ -517,9 +531,12 @@ def consolidar_dataset_final(
         clues_2, dist_2, time_2, metodo_2 = _aplicar_rutas(clues_2, dist_2, time_2, rutas["segundo"])
         estado = estado_ruteo(rutas["primer"], rutas["segundo"])
         consultado_en = np.array(
-            [max(a.consultado_en, b.consultado_en) for a, b in zip(rutas["primer"], rutas["segundo"])],
+            [max(a.consultado_en if a.estado == ESTADO_OK else "",
+                 b.consultado_en if b.estado == ESTADO_OK else "")
+             for a, b in zip(rutas["primer"], rutas["segundo"])],
             dtype=object,
         )
+        resultados_nivel = {p: rutas[n] for p, n in (("primary", "primer"), ("secondary", "segundo"))}
         pendientes = sum(
             ESTADO_PENDIENTE in (a.estado, b.estado)
             for a, b in zip(rutas["primer"], rutas["segundo"])
@@ -550,6 +567,18 @@ def consolidar_dataset_final(
             "routing_consulted_at": consultado_en,
         }
     )
+    for prefijo in ("primary", "secondary"):
+        resultados = resultados_nivel.get(prefijo)
+        df_final[f"{prefijo}_sakbe_status"] = (
+            [r.estado for r in resultados] if resultados is not None else ESTADO_PENDIENTE
+        )
+        df_final[f"{prefijo}_sakbe_reason"] = (
+            [r.motivo or "consulta_incompleta" for r in resultados]
+            if resultados is not None else "consulta_incompleta"
+        )
+        df_final[f"{prefijo}_sakbe_consulted_at"] = (
+            [r.consultado_en for r in resultados] if resultados is not None else ""
+        )
 
     #Variables de vulnerabilidad de ITER (antes del merge para conservar la alineación por fila).
     #En localidades confidenciales de ITER vienen vacías.

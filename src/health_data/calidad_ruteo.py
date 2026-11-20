@@ -6,6 +6,13 @@ import pandas as pd
 NIVELES = {"primary": ("Primer nivel", 60), "secondary": ("Segundo nivel", 120)}
 METODOS = {"sakbe", "coneval", "estimado"}
 ESTADOS = {"ok", "parcial", "sin_ruta", "estimado"}
+MOTIVOS_SAKBE = {
+    "ruta_optima": "Ruta óptima disponible",
+    "trayecto_local": "Trayecto local estimado a partir de tramos SAKBÉ",
+    "origen_sin_tramo": "SAKBÉ no ubicó un tramo cercano al origen",
+    "candidatos_sin_ruta": "SAKBÉ no obtuvo ruta a los candidatos evaluados",
+    "consulta_incompleta": "Consulta sin completar",
+}
 
 
 def tiempos_por_nivel(tabla: pd.DataFrame) -> pd.DataFrame:
@@ -28,6 +35,12 @@ def tiempos_por_nivel(tabla: pd.DataFrame) -> pd.DataFrame:
             "estimado": "Consulta sin confirmar en la tabla",
         }).fillna("Estado sin registrar")
         parte.loc[parte["metodo"].eq("sakbe"), "motivo"] = "Ruta disponible para este nivel"
+        for sufijo, campo in (("status", "estado_sakbe_nivel"),
+                              ("reason", "motivo_sakbe_nivel"),
+                              ("consulted_at", "fecha_sakbe_nivel")):
+            parte[campo] = tabla.reindex(columns=[f"{prefijo}_sakbe_{sufijo}"]).iloc[:, 0]
+        detalle = parte["motivo_sakbe_nivel"].map(MOTIVOS_SAKBE)
+        parte["motivo"] = detalle.fillna(parte["motivo"])
         parte.loc[parte["tiempo_min"].isna(), "motivo"] = "Tiempo válido no disponible"
         partes.append(parte)
     return pd.concat(partes, ignore_index=True)

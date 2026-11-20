@@ -206,6 +206,23 @@ def construir_reporte(raiz: Path) -> tuple[dict, dict[str, pd.DataFrame]]:
             sorted(set(excluidas) & set(accesibilidad["locality_id"]))
             if "locality_id" in accesibilidad else None
         )
+    if BASE in tablas:
+        tabla = tablas[BASE]
+        if {"routing_status", "population"} <= set(tabla):
+            resumen = (
+                tabla.groupby("routing_status", dropna=False, observed=True)
+                .agg(localidades=("population", "size"), habitantes=("population", "sum"))
+                .reset_index().astype(object)
+            )
+            reporte["ruteo_por_localidad"] = resumen.where(resumen.notna(), None).to_dict(orient="records")
+        niveles = tiempos_por_nivel(tabla)
+        resumen = (
+            niveles.groupby(["nivel", "metodo", "estado_sakbe_nivel", "motivo_sakbe_nivel"],
+                             dropna=False, observed=True)
+            .agg(localidades=("nivel", "size"), habitantes=("population", "sum"))
+            .reset_index().astype(object)
+        )
+        reporte["ruteo_por_nivel"] = resumen.where(resumen.notna(), None).to_dict(orient="records")
     if SALUD in tablas:
         if URG in tablas:
             reporte["uniones"]["Urgencias → CLUES"] = revisar_union(tablas[URG], tablas[SALUD], "clues", "clues")

@@ -21,9 +21,11 @@ def vista(tabla: pd.DataFrame) -> None:
     if elegir != "Todos":
         tabla = tabla.loc[tabla["municipality_name"].eq(elegir)]
     datos = tiempos_por_nivel(tabla)
-    fechas = pd.to_datetime(datos["routing_consulted_at"], errors="coerce", utc=True)
+    fecha_nivel = datos["fecha_sakbe_nivel"].replace("", pd.NA)
+    fechas = pd.to_datetime(fecha_nivel.fillna(datos["routing_consulted_at"]),
+                           errors="coerce", format="ISO8601")
     corte = fechas.max()
-    texto_corte = corte.strftime("%Y-%m-%d (UTC)") if pd.notna(corte) else "sin fecha registrada"
+    texto_corte = corte.strftime("%Y-%m-%d") if pd.notna(corte) else "sin fecha registrada"
     st.caption(f"Última consulta SAKBÉ registrada para esta selección · {texto_corte}. "
                "Los respaldos CONEVAL y las estimaciones se interpretan como aproximaciones.")
     for nivel, grupo in datos.groupby("nivel", sort=False):
@@ -37,7 +39,8 @@ def vista(tabla: pd.DataFrame) -> None:
     if metodo != "Todos":
         datos = datos.loc[datos["metodo"].eq(metodo)]
     st.subheader("Padrón provisional de revisión")
-    st.caption("Se construye a partir de la tabla actual. Los 58 casos históricos requieren su propia evidencia.")
+    st.caption("Una fila por localidad y nivel que requiere revisión. "
+               "Cuando hay evidencia en caché, se muestra el motivo y la fecha de SAKBÉ por nivel.")
     padron = padron_provisional(datos)
     st.dataframe(padron, hide_index=True)
     if not padron.empty:
