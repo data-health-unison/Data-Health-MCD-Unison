@@ -105,6 +105,20 @@ municipio y método y descarga del padrón provisional. El padrón tiene una fil
 por localidad y nivel que requiere revisión. La libreta
 [`3.3-eda-sensibilidad-ruteo.ipynb`](../notebooks/3.3-eda-sensibilidad-ruteo.ipynb)
 evalúa cómo cambia la clasificación al variar los umbrales de 60 y 120 minutos.
+
+### Arranque automático con Docker
+
+Con `data/interim/sakbe_cache.sqlite` disponible, un solo comando reconstruye,
+valida y publica el tablero local:
+
+```powershell
+docker compose up --build
+```
+
+El punto de entrada del contenedor ejecuta el ruteo en modo caché, la validación
+y la auditoría antes de Streamlit. Si faltan las tablas procesadas principales,
+ejecuta primero el pipeline. Un error en cualquiera de esas etapas detiene el
+contenedor para evitar mostrar un corte incompleto.
 La primera ejecución de la libreta vial extrae el GeoPackage en `data/interim/`
 y necesita unos 2.4 GB de espacio adicional.
 

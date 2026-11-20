@@ -85,13 +85,32 @@ No se utiliza Django ni PostgreSQL.
 
 ## Uso con Docker
 
-### Construir la imagen
+### Ejecutar todo el proyecto
 
 ```powershell
-docker compose build
+docker compose up --build
 ```
 
-### Ejecutar el pipeline
+El contenedor comprueba la caché en `data/interim/sakbe_cache.sqlite`, genera
+las tablas base si faltan, reconstruye la accesibilidad usando exclusivamente
+la caché, ejecuta las validaciones y la auditoría, y levanta el tablero. Los
+datos están montados desde el directorio del proyecto, por lo que persisten al
+reiniciar el contenedor.
+
+Cuando aparezca `Datos listos; iniciando tablero`, abrir:
+
+```text
+http://localhost:8501
+```
+
+Para iniciar Streamlit sin volver a preparar los datos:
+
+```powershell
+$env:HEALTH_AUTO_PREPARE = "0"
+docker compose up --build
+```
+
+### Operaciones manuales opcionales
 
 ```powershell
 docker compose run --rm app python -m health_data.pipeline
@@ -111,18 +130,6 @@ descargar; si su huella no coincide con la registrada, se detiene.
 
 ```powershell
 docker compose run --rm app python -m pytest tests -v
-```
-
-### Levantar el tablero
-
-```powershell
-docker compose up app
-```
-
-Abrir:
-
-```text
-http://localhost:8501
 ```
 
 ### Detener el proyecto

@@ -19,7 +19,7 @@ help:
 	@echo ""
 	@echo "Comandos Docker:"
 	@echo "  make docker-build  Construye la imagen"
-	@echo "  make docker-app    Levanta Streamlit"
+	@echo "  make docker-app    Prepara datos y levanta Streamlit"
 	@echo "  make docker-data   Ejecuta el pipeline"
 	@echo "  make docker-rutas  Consulta SAKBÉ"
 	@echo "  make docker-download Descarga una fuente (FUENTE=SALUD-001)"
