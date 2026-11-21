@@ -8,7 +8,7 @@
 - Un archivo que ya existe no se vuelve a descargar; si su huella no es la registrada,
   se detiene en vez de usarlo.
 
-Uso: ``make download FUENTE=SALUD-001`` para una fuente, o ``make data`` para todas.
+Uso: ``make download FUENTE=SALUD-001`` para una fuente, o ``make data`` para el flujo general.
 Las fuentes y sus descripciones están en config/fuentes_health.yaml.
 """
 

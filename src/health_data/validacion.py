@@ -182,6 +182,28 @@ def validar_tabla_final(tabla: pd.DataFrame) -> ReporteValidacion:
             )
         )
 
+    for nivel in ("primary", "secondary"):
+        estado, motivo, fecha, metodo = (
+            f"{nivel}_sakbe_status", f"{nivel}_sakbe_reason",
+            f"{nivel}_sakbe_consulted_at", f"{nivel}_method",
+        )
+        if {estado, motivo, fecha, metodo} <= set(tabla):
+            estados = tabla[estado]
+            sin_ruta = estados.eq("sin_ruta").fillna(False)
+            valido = (
+                estados.isin(["ok", "sin_ruta", "pendiente"])
+                & estados.eq("ok").eq(tabla[metodo].eq("sakbe"))
+                & (~sin_ruta | (
+                    tabla[motivo].isin(["origen_sin_tramo", "candidatos_sin_ruta"])
+                    & pd.to_datetime(tabla[fecha], errors="coerce", format="ISO8601").notna()
+                ))
+            ).fillna(False)
+            reporte.agregar(Comprobacion(
+                nombre=f"trazabilidad_sakbe_{nivel}",
+                paso=bool(valido.all()),
+                detalle=f"{int((~valido).sum())} filas con estado, método o evidencia incoherentes.",
+            ))
+
     return reporte
 
 

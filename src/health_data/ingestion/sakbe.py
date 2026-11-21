@@ -91,6 +91,10 @@ class SakbeCuotaAgotada(SakbeError):
 class SakbeSinRuta(SakbeError):
     """La API no encontró carretera cercana o ruta entre los puntos."""
 
+    def __init__(self, mensaje: str, consultado_en: str = "") -> None:
+        super().__init__(mensaje)
+        self.consultado_en = consultado_en
+
 
 class SakbeConexionError(SakbeError):
     """Fallo de red o del servidor tras agotar los reintentos."""
@@ -113,6 +117,7 @@ class Linea:
     source: int
     target: int
     nombre: str = ""
+    consultado_en: str = ""
 
 
 @dataclass(frozen=True)
@@ -469,7 +474,7 @@ class ClienteSakbe:
             self.aciertos_cache += 1
             exito, respuesta, consultado_en = guardado
             if not exito:
-                raise SakbeSinRuta(respuesta.get("message", "Sin resultado (caché)"))
+                raise SakbeSinRuta(respuesta.get("message", "Sin resultado (caché)"), consultado_en)
             return respuesta, consultado_en, True
 
         if self.solo_cache:
@@ -480,7 +485,7 @@ class ClienteSakbe:
         exito, mensaje = _exito(cuerpo)
         if not exito:
             self.cache.guardar(clave, endpoint, parametros, False, {"message": mensaje}, consultado_en)
-            raise SakbeSinRuta(mensaje or f"SAKBÉ no devolvió resultado en {endpoint}")
+            raise SakbeSinRuta(mensaje or f"SAKBÉ no devolvió resultado en {endpoint}", consultado_en)
 
         data = cuerpo.get("data")
         if isinstance(data, list):
@@ -489,7 +494,7 @@ class ClienteSakbe:
             self.cache.guardar(
                 clave, endpoint, parametros, False, {"message": "Respuesta sin datos"}, consultado_en
             )
-            raise SakbeSinRuta(f"SAKBÉ devolvió una respuesta vacía en {endpoint}")
+            raise SakbeSinRuta(f"SAKBÉ devolvió una respuesta vacía en {endpoint}", consultado_en)
 
         #La geometría puede pesar cientos de KB por ruta; no se usa en el análisis.
         data = {k: v for k, v in data.items() if k != "geojson"}
@@ -595,7 +600,7 @@ class ClienteSakbe:
                 "escala": int(esc),
             }
             try:
-                data, _, _ = self._consultar("buscalinea", parametros)
+                data, consultado_en, _ = self._consultar("buscalinea", parametros)
                 break
             except SakbeSinRuta:
                 if i == len(escalas) - 1:
@@ -606,6 +611,7 @@ class ClienteSakbe:
                 source=int(data["source"]),
                 target=int(data["target"]),
                 nombre=str(data.get("nombre") or ""),
+                consultado_en=consultado_en,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise SakbeError(f"Respuesta de buscalinea incompleta: {data}") from exc

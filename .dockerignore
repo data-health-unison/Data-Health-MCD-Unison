@@ -19,6 +19,14 @@ data/raw/*
 data/interim/*
 data/processed/*
 
+# El tablero puede empaquetar el corte local y la caché sin incluir el
+# GeoPackage vial de 2.4 GB ni los archivos crudos.
+!data/interim/sakbe_cache.sqlite
+!data/processed/*.parquet
+!data/processed/*.geojson
+!data/processed/geografia/
+!data/processed/geografia/*.geojson
+
 reports/figures/*
 
 *.log

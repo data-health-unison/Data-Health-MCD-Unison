@@ -28,6 +28,9 @@ Los resultados se relacionarán con población, edad, discapacidad, movilidad y 
 Cada fuente tiene su diccionario en `references/`. Las descargas quedan registradas, con su huella SHA-256, en
 `catalog/ingestions.csv`, y descritas en `references/fuentes_descargadas.md`.
 
+El flujo de [fuentes complementarias](docs/workflow.md#fuentes-complementarias-para-el-eda-de-accesibilidad)
+prepara las tablas de transporte público y marginación por localidad para el EDA.
+
 ## Flujo de datos
 
 ```text
@@ -82,13 +85,32 @@ No se utiliza Django ni PostgreSQL.
 
 ## Uso con Docker
 
-### Construir la imagen
+### Ejecutar todo el proyecto
 
 ```powershell
-docker compose build
+docker compose up --build
 ```
 
-### Ejecutar el pipeline
+El contenedor comprueba la caché en `data/interim/sakbe_cache.sqlite`, genera
+las tablas base si faltan, reconstruye la accesibilidad usando exclusivamente
+la caché, ejecuta las validaciones y la auditoría, y levanta el tablero. Los
+datos están montados desde el directorio del proyecto, por lo que persisten al
+reiniciar el contenedor.
+
+Cuando aparezca `Datos listos; iniciando tablero`, abrir:
+
+```text
+http://localhost:8501
+```
+
+Para iniciar Streamlit sin volver a preparar los datos:
+
+```powershell
+$env:HEALTH_AUTO_PREPARE = "0"
+docker compose up --build
+```
+
+### Operaciones manuales opcionales
 
 ```powershell
 docker compose run --rm app python -m health_data.pipeline
@@ -108,18 +130,6 @@ descargar; si su huella no coincide con la registrada, se detiene.
 
 ```powershell
 docker compose run --rm app python -m pytest tests -v
-```
-
-### Levantar el tablero
-
-```powershell
-docker compose up app
-```
-
-Abrir:
-
-```text
-http://localhost:8501
 ```
 
 ### Detener el proyecto
@@ -224,10 +234,14 @@ columna `routing_status` indica el origen de cada fila:
 
 | Valor | Significado |
 |---|---|
-| `ok` | Ambos niveles medidos con SAKBÉ |
+| `ok` | Ambos niveles cubiertos con SAKBÉ, incluidos los trayectos locales aproximados entre tramos |
 | `parcial` | Solo un nivel medido con SAKBÉ (SAKBÉ no ubica en su red a los candidatos del otro); el otro, con CONEVAL |
 | `sin_ruta` | SAKBÉ no encontró carretera cercana; tiempo asignado con CONEVAL |
 | `estimado` | Aún no consultada; tiempo asignado con CONEVAL (o la estimación, si faltan datos) |
+
+La reconstrucción con la caché histórica confirmó **cero consultas pendientes**.
+El [cierre del ruteo](docs/casos-ruteo-sin-cobertura.md) registra la clave, el
+nivel afectado, el motivo y la fecha de consulta de cada una de las 58 localidades.
 
 **Localidades excluidas.** Las 3 localidades de la Isla del Tiburón (16 habitantes) se excluyen del ruteo y
 del análisis: no tienen acceso por carretera y parecen campamentos de pesca, no localidades permanentes. La

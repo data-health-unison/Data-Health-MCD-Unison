@@ -19,13 +19,7 @@ services:
       PYTHONPATH: /project/src
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      HEALTH_AUTO_PREPARE: ${HEALTH_AUTO_PREPARE:-1}
       SAKBE_TOKENS: ${SAKBE_TOKENS:-}
       SAKBE_TOKEN: ${SAKBE_TOKEN:-}
       CARTO_API_KEY: ${CARTO_API_KEY:-}
-
-    command:
-      - streamlit
-      - run
-      - app.py
-      - --server.address=0.0.0.0
-      - --server.port=8501

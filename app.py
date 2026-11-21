@@ -20,7 +20,7 @@ if str(_RAIZ) not in sys.path:
 
 from health_data import analisis, config  # noqa: E402
 from health_data.processing import cartografia  # noqa: E402
-from health_data.visualization import mapas  # noqa: E402
+from health_data.visualization import calidad, complementarias, mapas  # noqa: E402
 
 log = logging.getLogger("health_data.tablero")
 
@@ -35,6 +35,10 @@ PAGINAS = [
     "📍 Localidades prioritarias",
     "👥 Grupos vulnerables",
     "📋 Tabla de localidades",
+    complementarias.TRANSPORTE,
+    complementarias.URGENCIAS,
+    complementarias.RED_VIAL,
+    calidad.PAGINA,
     "🔍 Metodología y fuentes",
 ]
 NIVELES = {
@@ -89,18 +93,24 @@ st.set_page_config(
 
 
 @st.cache_data(show_spinner=False)
+def _leer_accesibilidad(ruta: Path, mtime_ns: int) -> pd.DataFrame:
+    """Recarga el parquet cuando el pipeline escribe una nueva versión."""
+    return pd.read_parquet(ruta)
+
+
 def cargar_datos_procesados() -> pd.DataFrame:
     """Carga la tabla final consolidada si existe, o el intermedio disponible."""
     # 1. Tabla final completa de ruteo
     if config.ARCHIVO_TABLA_FINAL.exists():
-        return pd.read_parquet(config.ARCHIVO_TABLA_FINAL)
+        ruta = config.ARCHIVO_TABLA_FINAL
+        return _leer_accesibilidad(ruta, ruta.stat().st_mtime_ns)
 
     # 2. Respaldo intermedio CONEVAL-ACC-001 si ya fue generado
     archivo_coneval = (
         config.PROCESSED_DATA_DIR / "coneval-acc-001_localidades.parquet"
     )
     if archivo_coneval.exists():
-        df = pd.read_parquet(archivo_coneval)
+        df = _leer_accesibilidad(archivo_coneval, archivo_coneval.stat().st_mtime_ns)
         # Asegurar columnas mínimas para demostración si aún no hay ruteo
         if "municipality_name" not in df.columns and "municipio" in df.columns:
             df["municipality_name"] = df["municipio"]
@@ -154,6 +164,8 @@ def barra_lateral(
         )
 
         pagina = st.radio("Vista", PAGINAS, index=0)
+        if pagina in (complementarias.URGENCIAS, complementarias.RED_VIAL, calidad.PAGINA):
+            return {"pagina": pagina}
 
         st.divider()
         nivel = st.radio(
@@ -496,10 +508,25 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
 def main() -> None:
     cfg = config.cargar_configuracion()
     tabla = cargar_datos_procesados()
-    geojson = cargar_geojson_sonora()
-    manifiesto = cargar_manifiesto()
 
     controles = barra_lateral(tabla, cfg)
+    pagina = controles["pagina"]
+    if pagina == calidad.PAGINA:
+        calidad.vista(tabla)
+        return
+    if pagina == complementarias.URGENCIAS:
+        complementarias.vista_urgencias()
+        return
+    if pagina == complementarias.RED_VIAL:
+        complementarias.vista_red_vial()
+        return
+    if controles["municipio"] != "Todos":
+        tabla = tabla[tabla["municipality_name"] == controles["municipio"]].copy()
+    if pagina == complementarias.TRANSPORTE:
+        complementarias.vista_transporte(tabla, controles["umbral_segundo"])
+        pie_de_fuentes(tabla)
+        return
+
 
     # Si aún no hay datos generados en data/processed, mostrar pantalla de bienvenida defensiva
     if tabla.empty:
@@ -532,17 +559,12 @@ def main() -> None:
         )
         return
 
-    # Si hay filtro de municipio aplicado
-    if controles["municipio"] != "Todos":
-        tabla = tabla[tabla["municipality_name"] == controles["municipio"]].copy()
-
     nivel = NIVELES[str(controles["nivel"])]
     umbrales = {
         "umbral_primer": controles["umbral_primer"],
         "umbral_segundo": controles["umbral_segundo"],
         "umbrales": cfg.umbrales,
     }
-    pagina = controles["pagina"]
 
     # Si la tabla actual es solo el intermedio de CONEVAL (sin ruteo aún)
     tiene_ruteo = {"primary_time_min", "secondary_time_min"}.issubset(tabla.columns)
@@ -566,7 +588,7 @@ def main() -> None:
     if pagina == "🗺️ Panorama":
         vista_panorama(tabla, controles, umbrales, nivel)
     elif pagina == "📊 Municipios":
-        vista_municipios(tabla, controles, umbrales, nivel, geojson)
+        vista_municipios(tabla, controles, umbrales, nivel, cargar_geojson_sonora())
     elif pagina == "📍 Localidades prioritarias":
         vista_prioritarias(tabla, umbrales)
     elif pagina == "👥 Grupos vulnerables":
@@ -574,7 +596,7 @@ def main() -> None:
     elif pagina == "📋 Tabla de localidades":
         vista_tabla(tabla)
     elif pagina == "🔍 Metodología y fuentes":
-        vista_metodologia(tabla, cfg, manifiesto)
+        vista_metodologia(tabla, cfg, cargar_manifiesto())
 
     pie_de_fuentes(tabla)
 

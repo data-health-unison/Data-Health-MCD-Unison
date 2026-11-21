@@ -94,7 +94,7 @@ class ClienteFalso:
 
     def buscar_linea(self, lat, lon):
         if (lat, lon) in self.sin_linea:
-            raise SakbeSinRuta("sin línea")
+            raise SakbeSinRuta("sin línea", "2026-10-16T11:00:00")
         return Linea(id_routing_net=hash((lat, lon)) % 10_000, source=0, target=1, nombre=f"{lat},{lon}")
 
     def calcular_ruta(self, origen, destino):
@@ -105,7 +105,7 @@ class ClienteFalso:
         par = (origen.nombre, destino.nombre)
         self.rutas_calculadas.append(par)
         if par in self.sin_ruta:
-            raise SakbeSinRuta("sin ruta")
+            raise SakbeSinRuta("sin ruta", "2026-10-17T11:00:00")
         km, minutos = self.tiempos.get(par, (10.0, 12.0))
         return Ruta(km, minutos, False, 0.0, "", "2026-10-16T12:00:00", False)
 
@@ -142,10 +142,16 @@ def test_mejor_ruta_misma_via_no_consulta() -> None:
 
 def test_mejor_ruta_sin_ruta_y_sin_linea() -> None:
     cliente = ClienteFalso(sin_linea={(29.0, -111.0)})
-    assert mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)]).estado == "sin_ruta"
+    resultado = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)])
+    assert (resultado.estado, resultado.motivo, resultado.consultado_en) == (
+        "sin_ruta", "origen_sin_tramo", "2026-10-16T11:00:00"
+    )
 
     cliente = ClienteFalso(sin_ruta={("29.0,-111.0", "29.1,-111.0")})
-    assert mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)]).estado == "sin_ruta"
+    resultado = mejor_ruta_sakbe(cliente, 29.0, -111.0, [("A", 29.1, -111.0)])
+    assert (resultado.estado, resultado.motivo, resultado.consultado_en) == (
+        "sin_ruta", "candidatos_sin_ruta", "2026-10-17T11:00:00"
+    )
 
 
 def test_cuota_agotada_deja_pendiente_y_pausa_consultas() -> None:

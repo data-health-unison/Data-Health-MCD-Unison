@@ -84,3 +84,53 @@ fuentes:
     limite_diario: 10000
     estado: "approved"
     prioridad: "alta"
+
+  INEGI-RESLOC-001:
+    dataset_id: "INEGI-RESLOC-001"
+    nombre: "Características de las localidades 2020 - Sonora"
+    url: "https://www.inegi.org.mx/contenidos/programas/ccpv/iter/zip/resloc2020/resloc_26csv2020.zip"
+    nombre_archivo: "resloc_26csv2020.zip"
+    estado: "approved"
+    prioridad: "alta"
+    institucion: "INEGI, inegi.org.mx"
+    formato: "zip"
+    descripcion: "Características de las localidades de Sonora captadas en 2020, con disponibilidad de transporte público, frecuencia y tiempo a la cabecera municipal."
+    nota: "Descriptor: https://www.inegi.org.mx/app/scitel/doc/descriptor/FD_RESLOC_CPV2020.pdf"
+
+  SONORA-URG-001:
+    dataset_id: "SONORA-URG-001"
+    nombre: "Atención de urgencias 2018–2022"
+    url: "https://datos.sonora.gob.mx/dataset/318b9551-47a1-4e6b-a194-232ea5a08d43/resource/3bff8e8d-424e-4da3-878f-816a338e614e/download/202209261845420-file-1.xlsx"
+    nombre_archivo: "sonora_urgencias_2018_2022.xlsx"
+    estado: "approved"
+    prioridad: "media"
+    descarga_automatica: false
+    institucion: "Servicios de Salud de Sonora"
+    formato: "xlsx"
+    descripcion: "Conteos de urgencias por establecimiento, periodo y diagnóstico. El archivo contiene registros para 17 municipios de Sonora."
+    nota: "El libro contiene CLUES y Total_Urgencias, con desglose por mes y año. Recurso de uso no comercial. Diccionario: https://datos.sonora.gob.mx/dataset/318b9551-47a1-4e6b-a194-232ea5a08d43/resource/355da8aa-8544-4f32-b942-f54e007dd49b/download/diccionario-atencion-de-urgencias.csv"
+
+  CONAPO-MARG-001:
+    dataset_id: "CONAPO-MARG-001"
+    nombre: "Índice de marginación por localidad 2020"
+    url: "https://raw.githubusercontent.com/IndiceMx/IM_2020/main/IML_2020.xlsx"
+    nombre_archivo: "IML_2020.xlsx"
+    estado: "approved"
+    prioridad: "alta"
+    institucion: "CONAPO"
+    formato: "xlsx"
+    descripcion: "Base nacional del índice y grado de marginación y sus indicadores socioeconómicos por localidad en 2020."
+    nota: "Libro nacional publicado en el repositorio IndiceMx; el procesamiento conserva Sonora. Ficha: https://www.datos.gob.mx/dataset/indices_marginacion/resource/a80656ca-ef16-435f-8fac-ad15d2874adc"
+
+  INEGI-RNC-001:
+    dataset_id: "INEGI-RNC-001"
+    nombre: "Red Nacional de Caminos 2025"
+    url: "https://rnc.imt.mx/recursos/ShapeFiles/Red_Nacional_de_Caminos_2025.zip"
+    nombre_archivo: "Red_Nacional_de_Caminos_2025.zip"
+    estado: "approved"
+    prioridad: "media"
+    descarga_automatica: false
+    institucion: "INEGI, SICT e IMT"
+    formato: "zip"
+    descripcion: "Edición nacional 2025 de la red de transporte terrestre, distribuida como GeoPackage en un ZIP."
+    nota: "Se descarga por separado debido al tamaño del archivo nacional. Documento técnico: https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/nueva_estruc/889463927464.pdf"
