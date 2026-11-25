@@ -18,7 +18,7 @@ _RAIZ = Path(__file__).resolve().parent
 if str(_RAIZ) not in sys.path:
     sys.path.insert(0, str(_RAIZ))
 
-from health_data import analisis, config  # noqa: E402
+from health_data import __version__, analisis, config  # noqa: E402
 from health_data.processing import cartografia  # noqa: E402
 from health_data.visualization import mapas  # noqa: E402
 
@@ -193,6 +193,7 @@ def barra_lateral(
         st.caption(
             "Proyecto académico de la Maestría en Ciencia de Datos, Universidad de Sonora."
         )
+        st.caption(f"Versión {__version__}")
 
     return {
         "pagina": pagina,

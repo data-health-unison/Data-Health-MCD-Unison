@@ -270,7 +270,8 @@ difundidos deben citar a INEGI y a la API de Ruteo, como piden sus condiciones d
 
 ## Cómo contribuir
 
-Las convenciones de ramas, commits y pull requests están en [CONTRIBUTING.md](CONTRIBUTING.md).
+Las convenciones de ramas, commits, pull requests y versiones están en [CONTRIBUTING.md](CONTRIBUTING.md).
+Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md).
 
 ## Equipo
 
