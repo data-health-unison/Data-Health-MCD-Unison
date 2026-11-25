@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import logging
 import sys
 import time
@@ -35,6 +34,7 @@ from health_data.config import (
     cargar_configuracion,
     ensure_directories,
 )
+from health_data.trazabilidad import huella
 
 log = logging.getLogger(__name__)
 
@@ -160,12 +160,6 @@ def validar(
         VALIDADORES[formato](ruta, dataset_id or ruta.name, tamano_minimo=tamano_minimo)
     elif not ruta.exists() or ruta.stat().st_size == 0 or _parece_html(ruta):
         raise ContenidoInvalido(f"[{dataset_id or ruta.name}] El archivo está vacío o es una página HTML.")
-
-
-def huella(ruta: Path) -> str:
-    """Huella SHA-256 del archivo, con el prefijo ``sha256:``."""
-    with ruta.open("rb") as archivo:
-        return "sha256:" + hashlib.file_digest(archivo, "sha256").hexdigest()
 
 
 def _ruta_relativa(ruta: Path) -> str:

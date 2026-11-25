@@ -125,6 +125,23 @@ def test_tabla_sin_variables_de_vulnerabilidad(tablero) -> None:
         assert not at.exception, (pagina, [e.value for e in at.exception])
 
 
+def test_metodologia_muestra_la_corrida(tablero) -> None:
+    import json
+
+    ruta = tablero(_tabla())
+    manifiesto = {
+        "corrida": {"version": "0.2.0", "commit": "abcdef1234", "cambios_sin_commit": [], "inicio": "2026-11-25T10:00:00-07:00"},
+        "advertencias": ["El caché de SAKBÉ no tiene un respaldo registrado igual."],
+        "validacion": {"paso": True, "comprobaciones": [{"nombre": "x", "paso": True, "detalle": ""}] * 3, "fallidas": []},
+    }
+    (ruta.parent / "manifiesto.json").write_text(json.dumps(manifiesto), encoding="utf-8")
+    at = _ejecutar("🔍 Metodología y fuentes")
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("commit `abcdef1`" in c.value for c in at.caption)
+    assert any("respaldo" in w.value for w in at.warning)
+    assert any("3 comprobaciones superadas" in s.value for s in at.success)
+
+
 def test_sin_datos_muestra_bienvenida(tablero) -> None:
     tablero(None)
     at = AppTest.from_file(APP, default_timeout=60).run()

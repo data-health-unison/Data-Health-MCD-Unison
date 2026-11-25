@@ -9,10 +9,12 @@ from health_data.pipeline import (
     RAW_DATA_DIR,
     ensure_directories,
 )
+from health_data.trazabilidad import guardar_parquet
 
 
 ARCHIVO_CRUDO = RAW_DATA_DIR / "coneval_gacp2020_localidades.zip"
 ARCHIVO_SALIDA = PROCESSED_DATA_DIR / "coneval-acc-001_localidades.parquet"
+SALIDAS = (ARCHIVO_SALIDA,)  # Archivos que genera; el pipeline los revisa
 
 # El shapefile es nacional; se leen solo los atributos de Sonora, sin geometrías.
 CAPA = "Localidades_componentes_GACP_CONEVAL.shp"
@@ -150,7 +152,7 @@ def main() -> None:
 
     crudo = leer_crudo()
     tabla = procesar(crudo)
-    tabla.to_parquet(ARCHIVO_SALIDA, index=False)
+    guardar_parquet(tabla, ARCHIVO_SALIDA)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
     corregidos = crudo["NOM_LOC"].ne(sin_espacios_sobrantes(crudo["NOM_LOC"])).sum()

@@ -40,6 +40,7 @@ from health_data.ingestion.sakbe import (
     SakbeSinRuta,
     SakbeTokenError,
 )
+from health_data.trazabilidad import guardar_parquet
 
 log = logging.getLogger(__name__)
 
@@ -581,7 +582,7 @@ def consolidar_dataset_final(
     if "poblacion_con_discapacidad" in df_final.columns:
         df_final["poblacion_discapacidad"] = df_final["poblacion_con_discapacidad"]
 
-    df_final.to_parquet(ARCHIVO_TABLA_FINAL, index=False)
+    guardar_parquet(df_final, ARCHIVO_TABLA_FINAL)
     #Localidades a las que aún les falta consultar SAKBÉ en algún nivel
     df_final.attrs["localidades_pendientes"] = int(pendientes)
     log.info(

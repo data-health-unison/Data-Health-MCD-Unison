@@ -118,6 +118,12 @@ En cada hito (entregas del curso, presentaciones) y siempre que cambien las cifr
      actualizan los enlaces del final.
    - Si las cifras cambiaron, la sección lleva las nuevas.
    - `__version__` sube a `X.Y.Z` en `src/health_data/__init__.py`.
+   - Con esos cambios ya en un commit, se corre `make reprocesar` para que todo lo procesado y el manifiesto
+     registren ese commit sin cambios pendientes, y el manifiesto se copia a git:
+     `cp data/processed/manifiesto.json reports/manifiestos/vX.Y.Z.json`. Así las cifras de la versión quedan
+     ligadas a las huellas exactas de sus entradas y salidas.
+   - Si el caché de SAKBÉ cambió desde el último respaldo (el manifiesto lo avisa), `make respaldo-sakbe` y
+     subir el archivo a la carpeta compartida.
 2. Se abre el PR, se revisa y se fusiona como cualquier otro.
 3. En `main` ya actualizado se crea el tag y se sube:
 

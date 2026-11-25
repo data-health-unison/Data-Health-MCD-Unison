@@ -9,6 +9,7 @@ from health_data.pipeline import (
     RAW_DATA_DIR,
     ensure_directories,
 )
+from health_data.trazabilidad import estado_git, guardar_parquet
 
 
 ARCHIVO_CRUDO = RAW_DATA_DIR / "mg2025_26_sonora.zip"
@@ -17,6 +18,7 @@ ARCHIVO_AMANZANADAS = (
     PROCESSED_DATA_DIR / "inegi-geo-001_localidades_amanzanadas.parquet"
 )
 ARCHIVO_PUNTUALES = PROCESSED_DATA_DIR / "inegi-geo-001_localidades_puntuales.parquet"
+SALIDAS = (ARCHIVO_MUNICIPIOS, ARCHIVO_AMANZANADAS, ARCHIVO_PUNTUALES)  # Archivos que genera; el pipeline los revisa
 
 # Codificación de los .dbf. Los .cpg no la escriben igual en todas las capas.
 CODIFICACION = "ISO-8859-1"
@@ -157,8 +159,9 @@ def main() -> None:
         (amanzanadas, ARCHIVO_AMANZANADAS),
         (puntuales, ARCHIVO_PUNTUALES),
     ]
+    git = estado_git()
     for tabla, archivo in salidas:
-        tabla.to_parquet(archivo, index=False)
+        guardar_parquet(tabla, archivo, git=git)
 
     corregidos = sum(
         int(crudo["NOMGEO"].ne(sin_espacios_sobrantes(crudo["NOMGEO"])).sum())

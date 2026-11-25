@@ -477,11 +477,26 @@ def vista_metodologia(tabla: pd.DataFrame, cfg: config.Configuracion, manifiesto
     )
 
     if manifiesto:
+        corrida = manifiesto.get("corrida") or {}
+        if corrida:
+            st.subheader("Corrida que generó estos datos")
+            commit = (corrida.get("commit") or "sin registrar")[:7]
+            sin_commit = " · con cambios sin commit" if corrida.get("cambios_sin_commit") else ""
+            st.caption(
+                f"Versión {corrida.get('version')} · commit `{commit}`{sin_commit} · "
+                f"{str(corrida.get('inicio', ''))[:16].replace('T', ' ')}"
+            )
+        for aviso in manifiesto.get("advertencias", []):
+            st.warning(aviso)
+
         validacion = manifiesto.get("validacion")
         if validacion:
             st.subheader("Validación de calidad")
+            comprobaciones = validacion.get("comprobaciones", 0)
+            # Los manifiestos anteriores a la v0.2.0 guardaban solo el número de comprobaciones
+            total = len(comprobaciones) if isinstance(comprobaciones, list) else comprobaciones
             if validacion.get("paso"):
-                st.success(f"{validacion.get('comprobaciones', 0)} comprobaciones superadas.")
+                st.success(f"{total} comprobaciones superadas.")
             else:
                 for falla in validacion.get("fallidas", []):
                     st.warning(f"**{falla['nombre']}:** {falla['detalle']}")
