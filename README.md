@@ -268,6 +268,10 @@ Las 58 localidades sin ruta SAKBÉ en algún nivel (241 habitantes) usan un resp
 aproximación, y se excluyen 3 localidades de la Isla del Tiburón sin acceso por carretera. Los resultados
 difundidos deben citar a INEGI y a la API de Ruteo, como piden sus condiciones de uso.
 
+## Cómo contribuir
+
+Las convenciones de ramas, commits y pull requests están en [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Equipo
 
 Proyecto académico de la Maestría en Ciencia de Datos de la Universidad de Sonora.
