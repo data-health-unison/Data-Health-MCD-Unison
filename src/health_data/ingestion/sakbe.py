@@ -291,6 +291,37 @@ class CacheSakbe:
         self._con.close()
 
 
+def resumen_cache(ruta: Path | None = None) -> dict[str, Any] | None:
+    """Respuestas del caché, sus fechas y una huella de su contenido; None si no existe.
+
+    La huella se calcula sobre las respuestas (no sobre los bytes del archivo), así que dos
+    cachés con las mismas respuestas tienen la misma huella aunque SQLite los guarde distinto.
+    El consumo de cada token no entra en la huella: no cambia las rutas.
+    """
+    ruta = ruta or ARCHIVO_CACHE
+    if not ruta.exists():
+        return None
+    con = sqlite3.connect(f"file:{ruta.resolve().as_posix()}?mode=ro", uri=True)
+    try:
+        respuestas, exitosas, primera, ultima = con.execute(
+            "SELECT COUNT(*), COALESCE(SUM(exito), 0), MIN(consultado_en), MAX(consultado_en) FROM respuestas"
+        ).fetchone()
+        contenido = hashlib.sha256()
+        for clave, exito, respuesta in con.execute(
+            "SELECT clave, exito, respuesta FROM respuestas ORDER BY clave"
+        ):
+            contenido.update(f"{clave}\t{exito}\t{respuesta}\n".encode("utf-8"))
+    finally:
+        con.close()
+    return {
+        "respuestas": int(respuestas),
+        "exitosas": int(exitosas),
+        "primera_consulta": primera,
+        "ultima_consulta": ultima,
+        "huella_contenido": "sha256:" + contenido.hexdigest(),
+    }
+
+
 #--------------------------------------------------------------------------
 # Cliente
 #--------------------------------------------------------------------------

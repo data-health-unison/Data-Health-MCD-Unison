@@ -10,9 +10,11 @@ from health_data.config import (
     RAW_DATA_DIR,
     ensure_directories,
 )
+from health_data.trazabilidad import guardar_parquet
 
 ARCHIVO_CRUDO = RAW_DATA_DIR / "iter_26csv20.zip"
 ARCHIVO_SALIDA = PROCESSED_DATA_DIR / "inegi-pop-001_localidades.parquet"
+SALIDAS = (ARCHIVO_SALIDA,)  # Archivos que genera; el pipeline los revisa
 
 # Claves de localidad de los totales (0000) y acumulados de una (9998) y dos viviendas (9999)
 TOTALES_Y_ACUMULADOS = ["0000", "9998", "9999"]
@@ -205,7 +207,7 @@ def main() -> None:
 
     crudo = leer_crudo()
     tabla = procesar(crudo)
-    tabla.to_parquet(ARCHIVO_SALIDA, index=False)
+    guardar_parquet(tabla, ARCHIVO_SALIDA)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
     quitadas = len(crudo) - len(tabla)

@@ -2,21 +2,32 @@
 
 Coordina la descarga, limpieza, validación y consolidación de datos de salud
 y accesibilidad carretera en Sonora.
+
+Cada corrida deja un manifiesto en data/processed/manifiesto.json (el último, que lee el tablero)
+y una copia en data/processed/manifiestos/. El manifiesto dice con qué código se corrió (versión,
+commit y cambios sin commit), qué entradas usó (huella de cada crudo y del caché de SAKBÉ), qué pasó
+en cada paso, qué archivos quedaron en data/processed (huella, filas y con qué commit se generó
+cada uno) y el resultado de la validación.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.metadata
 import json
 import logging
 import platform
+import re
 import sys
 import time
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-import numpy as np
-import pandas as pd
-
+from health_data import __version__
 from health_data.config import (
     ARCHIVO_MANIFIESTO,
     ARCHIVO_TABLA_FINAL,
@@ -28,6 +39,7 @@ from health_data.config import (
 )
 from health_data.ingestion.descarga import descargar_dataset, fuentes_descargables
 from health_data.processing import cartografia
+from health_data.trazabilidad import describir_archivo, estado_git, ruta_relativa
 from health_data.validacion import ReporteValidacion, validar_archivo_procesado
 
 log = logging.getLogger("health_data.pipeline")
@@ -42,6 +54,45 @@ __all__ = [
     "run_pipeline",
 ]
 
+# Procesamiento de cada fuente: (id_fuente, módulo). Cada módulo define ARCHIVO_CRUDO, SALIDAS y main().
+PROCESAMIENTOS: tuple[tuple[str, str], ...] = (
+    ("CONEVAL-ACC-001", "health_data.processing.coneval_acc_001"),
+    ("INEGI-POP-001", "health_data.processing.inegi_pop_001"),
+    ("SALUD-001", "health_data.processing.salud_001"),
+    ("INEGI-GEO-001", "health_data.processing.inegi_geo_001"),
+)
+# Entradas del ruteo, que deja la tabla final
+INSUMOS_RUTEO = ("inegi-pop-001_localidades.parquet", "salud-001_establecimientos.parquet")
+
+ESTADO_EJECUTADO = "ejecutado"
+ESTADO_REUTILIZADO = "reutilizado"
+ESTADO_OMITIDO = "omitido"
+ESTADO_FALLIDO = "fallido"
+
+
+@dataclass
+class Paso:
+    """Qué pasó en un paso del pipeline."""
+
+    nombre: str
+    estado: str
+    segundos: float = 0.0
+    detalle: str = ""
+
+
+def _ejecutar(nombre: str, funcion: Callable[[], Any]) -> Paso:
+    """Corre un paso y registra su duración; una excepción lo marca como fallido."""
+    inicio = time.monotonic()
+    try:
+        codigo = funcion()
+    except Exception as exc:
+        log.warning("[%s] Falló: %s", nombre, exc)
+        return Paso(nombre, ESTADO_FALLIDO, round(time.monotonic() - inicio, 2), f"{type(exc).__name__}: {exc}")
+    segundos = round(time.monotonic() - inicio, 2)
+    if isinstance(codigo, int) and codigo != 0:
+        return Paso(nombre, ESTADO_FALLIDO, segundos, f"Terminó con código {codigo}.")
+    return Paso(nombre, ESTADO_EJECUTADO, segundos)
+
 
 def paso_cartografia(*, forzar: bool = False) -> None:
     """Descarga y asegura la cartografía vectorial de Sonora."""
@@ -54,12 +105,13 @@ def paso_cartografia(*, forzar: bool = False) -> None:
             log.warning("  No se pudo obtener la capa: %s", nombre)
 
 
-def paso_descargas(*, forzar: bool = False) -> dict[str, object]:
-    """Descarga las fuentes aprobadas en catalog/datasets.csv."""
+def paso_descargas(*, forzar: bool = False) -> dict[str, dict[str, Any]]:
+    """Descarga las fuentes aprobadas en catalog/datasets.csv; devuelve un resumen por fuente."""
     log.info("=== Paso: Descarga de fuentes ===")
-    resultados = {}
+    resultados: dict[str, dict[str, Any]] = {}
 
     for dataset_id, fuente in fuentes_descargables().items():
+        entrada: dict[str, Any] = {"id_fuente": dataset_id, "edicion": fuente.version}
         try:
             res = descargar_dataset(
                 dataset_id=dataset_id,
@@ -67,33 +119,47 @@ def paso_descargas(*, forzar: bool = False) -> dict[str, object]:
                 nombre_archivo=fuente.nombre_archivo,
                 forzar=forzar,
             )
-            resultados[dataset_id] = {
+            entrada |= {
+                "ruta": ruta_relativa(res.ruta, PROJECT_ROOT),
+                "huella": res.checksum,
                 "bytes": res.bytes_descargados,
-                "reutilizado": res.reutilizado,
-                "ruta": str(res.ruta),
-                "checksum": res.checksum,
+                "estado": ESTADO_REUTILIZADO if res.reutilizado else "descargado",
                 "registrada": res.registrada,
             }
         except Exception as exc:
             log.warning("[%s] No se pudo descargar: %s", dataset_id, exc)
-            resultados[dataset_id] = {"error": str(exc)}
+            entrada |= {"estado": ESTADO_FALLIDO, "error": str(exc)}
+        resultados[dataset_id] = entrada
 
     return resultados
 
 
-def paso_ruteo() -> None:
+def paso_procesamiento(dataset_id: str, nombre_modulo: str, *, forzar: bool = False) -> Paso:
+    """Procesa una fuente si su crudo existe y falta alguna salida (o con ``forzar``)."""
+    modulo = importlib.import_module(nombre_modulo)
+    nombre = f"procesar {dataset_id}"
+    if not modulo.ARCHIVO_CRUDO.exists():
+        return Paso(nombre, ESTADO_OMITIDO, detalle=f"Falta el crudo {ruta_relativa(modulo.ARCHIVO_CRUDO)}.")
+    if not forzar and all(salida.exists() for salida in modulo.SALIDAS):
+        return Paso(nombre, ESTADO_REUTILIZADO, detalle="Sus salidas ya existían; `make reprocesar` las regenera.")
+    log.info("=== Paso: Procesamiento de %s ===", dataset_id)
+    return _ejecutar(nombre, modulo.main)
+
+
+def paso_ruteo() -> Paso:
     """Recalcula la tabla final usando solo rutas SAKBÉ en caché (no gasta cuota).
 
     Se ejecuta siempre para incorporar las rutas obtenidas con ``make rutas``.
     """
     log.info("=== Paso: Ruteo a establecimientos de salud ===")
-    try:
+
+    def correr() -> int:
         from health_data.processing.ruteo import main as proc_ruteo
 
         print("Ejecutando cálculo de ruteo de salud...")
-        proc_ruteo()
-    except Exception as exc:
-        log.warning("No se pudo ejecutar ruteo: %s", exc)
+        return proc_ruteo()
+
+    return _ejecutar("ruteo", correr)
 
 
 def paso_validacion(ruta: Path | None = None) -> ReporteValidacion | None:
@@ -118,117 +184,218 @@ def paso_validacion(ruta: Path | None = None) -> ReporteValidacion | None:
     return reporte
 
 
-def guardar_manifiesto(
-    segundos: float,
-    descargas: dict[str, object],
-    args: dict[str, object],
+# --------------------------------------------------------------------------
+# Manifiesto
+# --------------------------------------------------------------------------
+
+
+def _paquetes() -> dict[str, str]:
+    """Versión instalada de cada dependencia de requirements.txt."""
+    requisitos = PROJECT_ROOT / "requirements.txt"
+    if not requisitos.exists():
+        return {}
+    versiones = {}
+    for linea in requisitos.read_text(encoding="utf-8").splitlines():
+        nombre = re.split(r"[=<>!~\[;\s]", linea.strip(), maxsplit=1)[0]
+        if nombre and not nombre.startswith("#"):
+            try:
+                versiones[nombre] = importlib.metadata.version(nombre)
+            except importlib.metadata.PackageNotFoundError:
+                versiones[nombre] = None
+    return versiones
+
+
+def _cache_sakbe() -> dict[str, Any] | None:
+    """Resumen del caché de SAKBÉ y el respaldo registrado que le corresponde, si hay."""
+    from health_data.ingestion.respaldo_sakbe import leer_respaldos
+    from health_data.ingestion.sakbe import resumen_cache
+
+    ruta = INTERIM_DATA_DIR / "sakbe_cache.sqlite"
+    resumen = resumen_cache(ruta)
+    if resumen is None:
+        return None
+    respaldo = next(
+        (r["archivo"] for r in leer_respaldos() if r["huella_contenido"] == resumen["huella_contenido"]), None
+    )
+    return {"ruta": ruta_relativa(ruta, PROJECT_ROOT), **resumen, "respaldo": respaldo}
+
+
+def _salidas(commit: str | None) -> list[dict[str, Any]]:
+    """Archivos de data/processed (sin los manifiestos), con el commit que generó cada uno."""
+    historial = ARCHIVO_MANIFIESTO.parent / "manifiestos"
+    archivos = sorted(
+        p for p in PROCESSED_DATA_DIR.rglob("*")
+        if p.is_file() and p.name != ".gitkeep" and p != ARCHIVO_MANIFIESTO and historial not in p.parents
+    )
+    salidas = []
+    for archivo in archivos:
+        descripcion = describir_archivo(archivo, PROJECT_ROOT)
+        if "sello" in descripcion:
+            sello = descripcion["sello"]
+            descripcion["al_dia"] = None if commit is None or sello is None else sello["commit"] == commit
+        salidas.append(descripcion)
+    return salidas
+
+
+def _advertencias(manifiesto: dict[str, Any]) -> list[str]:
+    """Lo que conviene revisar de una corrida, en frases cortas."""
+    avisos = []
+    corrida = manifiesto["corrida"]
+    if corrida["commit"] is None:
+        avisos.append(f"No se registró el commit ({corrida.get('motivo_sin_commit')}).")
+    elif corrida["cambios_sin_commit"]:
+        avisos.append(
+            f"Se corrió con {len(corrida['cambios_sin_commit'])} archivos con cambios sin commit: "
+            "el resultado no se puede reproducir solo con el commit."
+        )
+    for paso in manifiesto["pasos"]:
+        if paso["estado"] == ESTADO_FALLIDO:
+            avisos.append(f"Falló el paso «{paso['nombre']}»: {paso['detalle']}")
+    for entrada in manifiesto["entradas"]["crudos"]:
+        if entrada["estado"] == ESTADO_FALLIDO:
+            avisos.append(f"No se pudo obtener el crudo de {entrada['id_fuente']}: {entrada.get('error')}")
+    cache = manifiesto["entradas"]["cache_sakbe"]
+    if cache is not None and cache["respaldo"] is None:
+        avisos.append("El caché de SAKBÉ no tiene un respaldo registrado igual; corra `make respaldo-sakbe`.")
+    for salida in manifiesto["salidas"]:
+        if "error" in salida:
+            avisos.append(f"{salida['ruta']}: {salida['error']}")
+        if "sello" not in salida:
+            continue
+        if salida["sello"] is None:
+            avisos.append(f"{salida['ruta']} se generó antes de existir el sello; `make reprocesar` lo regenera.")
+        elif salida["al_dia"] is False:
+            avisos.append(
+                f"{salida['ruta']} se generó con el commit {salida['sello']['commit'][:7]}, no con el actual; "
+                "si su código cambió, `make reprocesar` lo regenera."
+            )
+    validacion = manifiesto["validacion"]
+    if validacion is not None and not validacion["paso"]:
+        avisos.append(f"La validación tiene {len(validacion['fallidas'])} comprobaciones fallidas.")
+    return avisos
+
+
+def construir_manifiesto(
     *,
-    validacion: ReporteValidacion | None = None,
-) -> Path:
-    """Genera el manifiesto de trazabilidad de la ejecución del pipeline."""
-    manifiesto = {
+    inicio: datetime,
+    segundos: float,
+    argumentos: dict[str, Any],
+    git: dict[str, Any],
+    descargas: dict[str, dict[str, Any]],
+    pasos: list[Paso],
+    validacion: ReporteValidacion | None,
+) -> dict[str, Any]:
+    """Arma el manifiesto de una corrida del pipeline."""
+    manifiesto: dict[str, Any] = {
         "proyecto": "Data Health MCD Unison",
-        "generado_en": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "duracion_segundos": round(segundos, 2),
-        "entorno": {
-            "python": sys.version,
-            "plataforma": platform.platform(),
-            "pandas": pd.__version__,
-            "numpy": np.__version__,
+        "id_corrida": f"{inicio:%Y%m%dT%H%M%S}",
+        "corrida": {
+            "inicio": inicio.isoformat(timespec="seconds"),
+            "duracion_segundos": round(segundos, 2),
+            "version": __version__,
+            "commit": git.get("commit"),
+            "rama": git.get("rama"),
+            "cambios_sin_commit": git.get("cambios_sin_commit", []),
+            "argumentos": argumentos,
+            "entorno": {
+                "python": platform.python_version(),
+                "plataforma": platform.platform(),
+                "paquetes": _paquetes(),
+            },
         },
-        "argumentos": args,
-        "descargas": descargas,
-        "archivos_salida": {
-            "tabla_final": str(ARCHIVO_TABLA_FINAL.relative_to(PROJECT_ROOT))
-            if ARCHIVO_TABLA_FINAL.exists()
-            else None,
+        "entradas": {
+            "crudos": list(descargas.values()),
+            "cache_sakbe": _cache_sakbe(),
         },
+        "pasos": [asdict(p) for p in pasos],
+        "salidas": _salidas(git.get("commit")),
         "validacion": None
         if validacion is None
         else {
             "paso": validacion.paso,
-            "comprobaciones": len(validacion.comprobaciones),
-            "fallidas": [
-                {"nombre": c.nombre, "detalle": c.detalle} for c in validacion.fallidas
+            "comprobaciones": [
+                {"nombre": c.nombre, "paso": c.paso, "detalle": c.detalle} for c in validacion.comprobaciones
             ],
+            "fallidas": [{"nombre": c.nombre, "detalle": c.detalle} for c in validacion.fallidas],
         },
     }
-
-    ARCHIVO_MANIFIESTO.parent.mkdir(parents=True, exist_ok=True)
-    with ARCHIVO_MANIFIESTO.open("w", encoding="utf-8") as fh:
-        json.dump(manifiesto, fh, ensure_ascii=False, indent=2, default=str)
-
-    log.info("Manifiesto generado en: %s", ARCHIVO_MANIFIESTO)
-    return ARCHIVO_MANIFIESTO
+    if git.get("commit") is None:
+        manifiesto["corrida"]["motivo_sin_commit"] = git.get("motivo")
+    manifiesto["advertencias"] = _advertencias(manifiesto)
+    return manifiesto
 
 
-def run_pipeline(*, forzar: bool = False, solo_descarga: bool = False) -> None:
-    """Ejecuta las etapas principales del pipeline de datos."""
-    inicio = time.monotonic()
+def guardar_manifiesto(manifiesto: dict[str, Any]) -> Path:
+    """Guarda el manifiesto como el último (manifiesto.json) y en el historial de corridas."""
+    historial = ARCHIVO_MANIFIESTO.parent / "manifiestos" / f"{manifiesto['id_corrida']}.json"
+    historial.parent.mkdir(parents=True, exist_ok=True)
+    texto = json.dumps(manifiesto, ensure_ascii=False, indent=2, default=str)
+    for destino in (ARCHIVO_MANIFIESTO, historial):
+        destino.write_text(texto + "\n", encoding="utf-8")
+    log.info("Manifiesto guardado en %s y %s", ARCHIVO_MANIFIESTO.name, ruta_relativa(historial, PROJECT_ROOT))
+    return historial
+
+
+def run_pipeline(
+    *, forzar: bool = False, solo_descarga: bool = False, reprocesar: bool = False
+) -> dict[str, Any] | None:
+    """Ejecuta las etapas del pipeline y devuelve el manifiesto de la corrida.
+
+    ``reprocesar`` regenera las salidas de cada fuente con los crudos que ya están; ``forzar``
+    además vuelve a descargar los crudos (y puede traer una edición nueva de la fuente).
+    """
+    inicio = datetime.now().astimezone()
+    reloj = time.monotonic()
     ensure_directories()
+    git = estado_git(PROJECT_ROOT)
 
     print("Data Health MCD Unison")
+    print(f"Versión {__version__} · commit {(git['commit'] or 'sin registrar')[:7]}")
     print(f"Directorio raíz: {PROJECT_ROOT}")
-    print(f"Datos crudos: {RAW_DATA_DIR}")
-    print(f"Datos intermedios: {INTERIM_DATA_DIR}")
-    print(f"Datos procesados: {PROCESSED_DATA_DIR}")
 
-    # 1. Cartografía
-    paso_cartografia(forzar=forzar)
+    pasos: list[Paso] = [_ejecutar("cartografia", lambda: paso_cartografia(forzar=forzar))]
 
-    # 2. Descargas
     descargas = paso_descargas(forzar=forzar)
     if solo_descarga:
         print("Etapa de descarga terminada.")
-        return
+        return None
 
-    # 3. Procesamientos individuales
-    print("Verificando módulos de procesamiento...")
+    for dataset_id, nombre_modulo in PROCESAMIENTOS:
+        paso = paso_procesamiento(dataset_id, nombre_modulo, forzar=forzar or reprocesar)
+        log.info("[%s] %s. %s", paso.nombre, paso.estado, paso.detalle)
+        pasos.append(paso)
 
-    # 3.1 CONEVAL-ACC-001
-    coneval_crudo = RAW_DATA_DIR / "coneval_gacp2020_localidades.zip"
-    archivo_coneval_proc = PROCESSED_DATA_DIR / "coneval-acc-001_localidades.parquet"
-    if coneval_crudo.exists() and (forzar or not archivo_coneval_proc.exists()):
-        try:
-            from health_data.processing.coneval_acc_001 import main as proc_coneval
-            print("Ejecutando procesamiento de CONEVAL-ACC-001...")
-            proc_coneval()
-        except Exception as exc:
-            log.warning("No se pudo ejecutar coneval_acc_001: %s", exc)
+    if all((PROCESSED_DATA_DIR / nombre).exists() for nombre in INSUMOS_RUTEO):
+        pasos.append(paso_ruteo())
+    else:
+        pasos.append(Paso("ruteo", ESTADO_OMITIDO, detalle="Faltan ITER o CLUES procesados."))
 
-    # 3.2 INEGI-POP-001 (ITER)
-    iter_crudo = RAW_DATA_DIR / "iter_26csv20.zip"
-    archivo_iter_proc = PROCESSED_DATA_DIR / "inegi-pop-001_localidades.parquet"
-    if iter_crudo.exists() and (forzar or not archivo_iter_proc.exists()):
-        try:
-            from health_data.processing.inegi_pop_001 import main as proc_iter
-            print("Ejecutando procesamiento de INEGI-POP-001 (ITER)...")
-            proc_iter()
-        except Exception as exc:
-            log.warning("No se pudo ejecutar inegi_pop_001: %s", exc)
-
-    # 3.3 SALUD-001 (CLUES)
-    clues_crudo = RAW_DATA_DIR / "ESTABLECIMIENTO_SALUD_202608.xlsx"
-    archivo_salud_proc = PROCESSED_DATA_DIR / "salud-001_establecimientos.parquet"
-    if clues_crudo.exists() and (forzar or not archivo_salud_proc.exists()):
-        try:
-            from health_data.processing.salud_001 import main as proc_salud
-            print("Ejecutando procesamiento de SALUD-001 (CLUES)...")
-            proc_salud()
-        except Exception as exc:
-            log.warning("No se pudo ejecutar salud_001: %s", exc)
-
-    # 3.4 Ruteo y Accesibilidad a Centros de Salud
-    if archivo_iter_proc.exists() and archivo_salud_proc.exists():
-        paso_ruteo()
-
-    # 3.5 Validación de calidad
     reporte = paso_validacion()
+    if reporte is None:
+        pasos.append(Paso("validacion", ESTADO_OMITIDO, detalle="No existe la tabla final."))
+    else:
+        pasos.append(
+            Paso("validacion", ESTADO_EJECUTADO, detalle=f"{len(reporte.fallidas)} de {len(reporte.comprobaciones)} fallidas.")
+        )
 
-    # 4. Guardar manifiesto de ejecución
-    segundos = time.monotonic() - inicio
-    guardar_manifiesto(segundos, descargas, {"forzar": forzar}, validacion=reporte)
+    segundos = time.monotonic() - reloj
+    manifiesto = construir_manifiesto(
+        inicio=inicio,
+        segundos=segundos,
+        argumentos={"forzar": forzar, "reprocesar": reprocesar},
+        git=git,
+        descargas=descargas,
+        pasos=pasos,
+        validacion=reporte,
+    )
+    guardar_manifiesto(manifiesto)
+
     print(f"Pipeline ejecutado en {segundos:.2f} s.")
+    if manifiesto["advertencias"]:
+        print("Para revisar:")
+        for aviso in manifiesto["advertencias"]:
+            print(f"  - {aviso}")
+    return manifiesto
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -240,7 +407,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--forzar",
         action="store_true",
-        help="Fuerza la descarga y reprocesamiento aunque existan cachés.",
+        help="Vuelve a descargar los crudos y a procesarlo todo (puede traer una edición nueva de una fuente).",
+    )
+    parser.add_argument(
+        "--reprocesar",
+        action="store_true",
+        help="Regenera las salidas de cada fuente con los crudos que ya están (no descarga nada).",
     )
     parser.add_argument(
         "--solo-cartografia",
@@ -269,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
         paso_cartografia(forzar=args.forzar)
         return 0
 
-    run_pipeline(forzar=args.forzar, solo_descarga=args.solo_descarga)
+    run_pipeline(forzar=args.forzar, solo_descarga=args.solo_descarga, reprocesar=args.reprocesar)
     return 0
 
 

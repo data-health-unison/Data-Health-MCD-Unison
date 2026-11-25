@@ -12,12 +12,14 @@ from health_data.config import (
     RAW_DATA_DIR,
     ensure_directories,
 )
+from health_data.trazabilidad import guardar_parquet
 
 log = logging.getLogger(__name__)
 
 ARCHIVO_CRUDO = RAW_DATA_DIR / "ESTABLECIMIENTO_SALUD_202608.xlsx"
 HOJA = "CLUES_202608"
 ARCHIVO_SALIDA = PROCESSED_DATA_DIR / "salud-001_establecimientos.parquet"
+SALIDAS = (ARCHIVO_SALIDA,)  # Archivos que genera; el pipeline los revisa
 ARCHIVO_VERIFICADAS = (
     PROJECT_ROOT / "references" / "salud-001_coordenadas_verificadas.csv"
 )
@@ -262,7 +264,7 @@ def main() -> None:
     )
 
     tabla = procesar(crudo, verificadas)
-    tabla.to_parquet(ARCHIVO_SALIDA, index=False)
+    guardar_parquet(tabla, ARCHIVO_SALIDA)
 
     ruta = ARCHIVO_SALIDA.relative_to(PROJECT_ROOT).as_posix()
     print(f"Establecimientos procesados: {len(tabla)}")

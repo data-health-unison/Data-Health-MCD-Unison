@@ -58,6 +58,9 @@ data/interim/*
 data/processed/*
 !data/processed/.gitkeep
 
+# Respaldos del caché de SAKBÉ (se suben a la carpeta compartida del equipo, no a git)
+data/respaldos/
+
 # ============================================================
 # IDE / OS
 # ============================================================

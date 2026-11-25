@@ -11,12 +11,26 @@ Cada pull request agrega su línea en **Sin publicar**, en el apartado que le to
 
 ### Agregado
 
+- Manifiesto por corrida: versión, commit y cambios sin commit; huella de cada crudo y del caché de SAKBÉ;
+  estado de cada paso (ejecutado, reutilizado, omitido o fallido); huella, filas y columnas de cada archivo de
+  `data/processed`, y todas las comprobaciones de la validación. Se guarda un historial en
+  `data/processed/manifiestos/` y el tablero muestra la corrida y sus advertencias.
+- Cada parquet guarda en sus metadatos con qué versión y commit se generó; el manifiesto avisa si un archivo
+  reutilizado viene de otro commit.
+- Respaldo y restauración del caché de SAKBÉ (`make respaldo-sakbe`, `make restaurar-sakbe`), registrados en
+  `catalog/respaldos.csv`.
+- El Marco Geoestadístico (INEGI-GEO-001) se procesa dentro del pipeline; antes se corría a mano.
+- `make reprocesar` (`--reprocesar`): regenera lo procesado con los crudos que ya están, sin descargar.
+- Fichas técnicas de elección e ingesta y de exploración de los datos (`docs/ficha-tecnica/`).
 - Versión del proyecto en un solo lugar (`src/health_data/__init__.py`), este CHANGELOG, las reglas de versión
   en `CONTRIBUTING.md` y la versión en el pie de la barra lateral del tablero.
 
 ### Cambiado
 
 - `pyproject.toml` toma las dependencias de `requirements.txt`; antes declaraba solo `pandas` y `requests`.
+- `make clean-data` ya no borra el caché de SAKBÉ.
+- El manifiesto usa rutas relativas al proyecto (antes, absolutas de la computadora que corría el pipeline).
+- La imagen de Docker incluye git, para registrar el commit de las corridas.
 - Catálogo de fuentes como fuente única: `catalog/datasets.csv` dice qué es cada fuente, su estado y su
   responsable, y `config/fuentes_health.yaml` solo cómo descargarla. Columnas de `datasets.csv` e
   `ingestions.csv`, y estados de las fuentes, en español.

@@ -94,6 +94,20 @@ docker compose build
 docker compose run --rm app python -m health_data.pipeline
 ```
 
+Cada corrida deja un manifiesto en `data/processed/manifiesto.json` (el último, que muestra el tablero en
+*Metodología y fuentes*) y una copia en `data/processed/manifiestos/`. Registra:
+
+- con qué código se corrió: versión, commit y archivos con cambios sin commit;
+- las entradas: la huella de cada crudo y del caché de SAKBÉ, y si ese caché tiene respaldo;
+- qué pasó en cada paso: ejecutado, reutilizado, omitido o fallido;
+- cada archivo de `data/processed` con su huella, filas y columnas, y el commit con que se generó (cada parquet
+  lo lleva guardado en sus metadatos);
+- todas las comprobaciones de la validación.
+
+Al final, la terminal lista lo que conviene revisar. Por ejemplo, un archivo reutilizado que se generó con otro
+commit: si su código cambió, `make reprocesar` regenera todo lo procesado con los crudos que ya están. No hay
+que usar `--forzar` para eso, porque además vuelve a descargar las fuentes y puede traer una edición nueva.
+
 ### Descargar una sola fuente
 
 ```powershell
@@ -201,6 +215,24 @@ docker compose run --rm app python -m health_data.ingestion.sakbe --probar  #rut
   agotan se detiene con `SakbeCuotaAgotada`.
 - Cada ruta guarda su fecha de consulta (`consultado_en`), ya que la red se
   actualiza cada año.
+
+### Respaldo del caché de SAKBÉ
+
+El caché tiene las 37,555 respuestas del ruteo. Regenerarlo cuesta días de cuota, y sin él nadie más puede
+reproducir la tabla final. No contiene los tokens, solo una huella corta de cada uno.
+
+```bash
+make respaldo-sakbe                                        # crea data/respaldos/sakbe_cache_<fecha>.sqlite.gz
+make restaurar-sakbe ARCHIVO=~/Downloads/sakbe_cache_<fecha>.sqlite.gz
+```
+
+- `respaldo-sakbe` registra el respaldo en `catalog/respaldos.csv` (huella del archivo y de su contenido). El
+  archivo se sube a la carpeta compartida del equipo en OneDrive (pídele acceso a David) y el registro se sube
+  a git.
+- `restaurar-sakbe` revisa que el archivo descargado sea un respaldo registrado e intacto antes de colocarlo en
+  `data/interim/`. Si ya hay un caché distinto, no lo reemplaza; con `FORZAR=1` lo reemplaza y guarda una copia
+  del anterior.
+- `make clean-data` no borra el caché ni los respaldos.
 
 ### Estado actual del ruteo
 

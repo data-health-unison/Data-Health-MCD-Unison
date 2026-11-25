@@ -6,6 +6,7 @@ Dos archivos, cada uno con un papel distinto. Cada dato vive en un solo lugar:
 |---|---|---|
 | `datasets.csv` | Qué fuentes se evaluaron, su estado, su responsable y la decisión del equipo | El equipo, a mano |
 | `ingestions.csv` | Cada descarga guardada en `data/raw`, con su huella SHA-256 | El script de descarga; no se edita a mano |
+| `respaldos.csv` | Cada respaldo del caché de SAKBÉ, con su huella | `make respaldo-sakbe`; no se edita a mano |
 
 Cómo se descarga cada fuente (enlace, nombre del archivo, token de la API) no está aquí, sino en
 `config/fuentes_health.yaml`. Toda fuente de ese archivo debe estar antes en `datasets.csv`, y solo se descargan
@@ -64,3 +65,20 @@ make download FUENTE=SALUD-001
 | `estado` | `ok` si el archivo pasó la validación |
 | `notas` | Observaciones de la descarga; vacío si no hay |
 | `url_descarga` | Enlace directo usado en la descarga (distinto de `url_fuente`, que lleva a la página de la fuente) |
+
+## respaldos.csv
+
+Lo llena `make respaldo-sakbe`, con una fila por respaldo distinto del anterior. El archivo comprimido no va en
+git: se sube a la carpeta compartida del equipo. `make restaurar-sakbe` usa este registro para comprobar que
+el archivo descargado esté intacto.
+
+| Columna | Qué lleva |
+|---|---|
+| `id_respaldo` | `SAKBE_` y fecha del respaldo, por ejemplo `SAKBE_20261125T101500` |
+| `fecha_respaldo` | Fecha y hora del respaldo, con zona horaria |
+| `archivo` | Nombre del archivo comprimido (`sakbe_cache_<fecha>.sqlite.gz`) |
+| `huella_archivo` | Huella SHA-256 del archivo comprimido |
+| `huella_contenido` | Huella de las respuestas guardadas; es la que registra el manifiesto de cada corrida |
+| `respuestas`, `exitosas` | Respuestas guardadas y cuántas traen ruta |
+| `primera_consulta`, `ultima_consulta` | Fechas de la primera y la última consulta a SAKBÉ |
+| `notas` | Observaciones; vacío si no hay |
