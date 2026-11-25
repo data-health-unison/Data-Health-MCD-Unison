@@ -1,1 +1,2 @@
 id_respaldo,fecha_respaldo,archivo,huella_archivo,huella_contenido,respuestas,exitosas,primera_consulta,ultima_consulta,notas
+SAKBE_20261125T010835,2026-11-25T01:08:35-07:00,sakbe_cache_20261125T010835.sqlite.gz,sha256:ca89b15f08ab0996f83471c02c1fa2172acc265b58dd30bdbe24308cc01d571d,sha256:27fa25b9746d1f03c1aa24013e15d6e01f0b37cb4c134af87a8e81d5fd707c9b,37555,36591,2026-10-16T18:41:15,2026-10-18T19:00:23,
