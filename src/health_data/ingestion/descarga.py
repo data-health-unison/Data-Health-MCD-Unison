@@ -9,7 +9,8 @@
   se detiene en vez de usarlo.
 
 Uso: ``make download FUENTE=SALUD-001`` para una fuente, o ``make data`` para todas.
-Las fuentes y sus descripciones están en config/fuentes_health.yaml.
+Se descargan las fuentes aprobadas en catalog/datasets.csv; el enlace, el archivo y su
+descripción están en config/fuentes_health.yaml.
 """
 
 from __future__ import annotations
@@ -52,14 +53,14 @@ REINTENTOS = 3
 REGISTRO = PROJECT_ROOT / "catalog" / "ingestions.csv"
 DESCRIPCION = PROJECT_ROOT / "references" / "fuentes_descargadas.md"
 COLUMNAS_REGISTRO = [
-    "ingestion_id",
-    "dataset_id",
-    "retrieved_at",
-    "raw_path",
-    "checksum",
-    "status",
-    "notes",
-    "download_url",
+    "id_ingesta",
+    "id_fuente",
+    "fecha_descarga",
+    "ruta_crudo",
+    "huella",
+    "estado",
+    "notas",
+    "url_descarga",
 ]
 
 
@@ -185,7 +186,7 @@ def leer_registro() -> list[dict[str, str]]:
 
 def ultimo_registro(ruta: Path) -> dict[str, str] | None:
     """Última fila registrada del archivo, o None si no tiene."""
-    filas = [f for f in leer_registro() if f["raw_path"] == _ruta_relativa(ruta)]
+    filas = [f for f in leer_registro() if f["ruta_crudo"] == _ruta_relativa(ruta)]
     return filas[-1] if filas else None
 
 
@@ -193,14 +194,14 @@ def registrar(dataset_id: str, url: str, ruta: Path, checksum: str) -> None:
     """Agrega la descarga a catalog/ingestions.csv (lo crea con su encabezado si no existe)."""
     fecha = datetime.now().astimezone()
     fila = {
-        "ingestion_id": f"{dataset_id}_{fecha:%Y%m%dT%H%M%S}",
-        "dataset_id": dataset_id,
-        "retrieved_at": fecha.isoformat(timespec="seconds"),
-        "raw_path": _ruta_relativa(ruta),
-        "checksum": checksum,
-        "status": "ok",
-        "notes": "",
-        "download_url": url,
+        "id_ingesta": f"{dataset_id}_{fecha:%Y%m%dT%H%M%S}",
+        "id_fuente": dataset_id,
+        "fecha_descarga": fecha.isoformat(timespec="seconds"),
+        "ruta_crudo": _ruta_relativa(ruta),
+        "huella": checksum,
+        "estado": "ok",
+        "notas": "",
+        "url_descarga": url,
     }
     nuevo = not REGISTRO.exists()
     if nuevo:
@@ -222,10 +223,10 @@ def _revisar_existente(ruta: Path, dataset_id: str) -> str:
     registro = ultimo_registro(ruta)
     if registro is None:
         log.info("[%s] %s no está en el registro de descargas (%s).", dataset_id, ruta.name, actual)
-    elif registro["checksum"] != actual:
+    elif registro["huella"] != actual:
         raise ContenidoInvalido(
             f"[{dataset_id}] {ruta.name} ya existe, pero su huella no es la registrada el "
-            f"{registro['retrieved_at']}. Revise si el crudo cambió; para volver a descargarlo, "
+            f"{registro['fecha_descarga']}. Revise si el crudo cambió; para volver a descargarlo, "
             f"bórrelo o use --forzar."
         )
     return actual
@@ -234,7 +235,7 @@ def _revisar_existente(ruta: Path, dataset_id: str) -> str:
 def escribir_descripcion(fuentes: dict[str, FuenteInfo] | None = None) -> None:
     """Describe la última descarga de cada fuente en references/fuentes_descargadas.md."""
     fuentes = fuentes if fuentes is not None else cargar_configuracion().fuentes
-    ultimas = {fila["raw_path"]: fila for fila in leer_registro()}
+    ultimas = {fila["ruta_crudo"]: fila for fila in leer_registro()}
     lineas = [
         "# Fuentes descargadas",
         "",
@@ -247,18 +248,22 @@ def escribir_descripcion(fuentes: dict[str, FuenteInfo] | None = None) -> None:
         fila = ultimas.get(_ruta_relativa(RAW_DATA_DIR / fuente.nombre_archivo))
         if fila is None:
             continue
-        fecha = datetime.fromisoformat(fila["retrieved_at"])
+        fecha = datetime.fromisoformat(fila["fecha_descarga"])
         lineas += ["", f"## {fuente.dataset_id}: {fuente.nombre}"]
         if fuente.descripcion:
             lineas += ["", fuente.descripcion]
         lineas += [""]
         if fuente.institucion:
             lineas += [f"- Fuente: {fuente.institucion}"]
+        if fuente.url_fuente:
+            lineas += [f"- Página de la fuente: {fuente.url_fuente}"]
+        if fuente.version:
+            lineas += [f"- Edición: {fuente.version}"]
         lineas += [
-            f"- Descarga: {fila.get('download_url') or fuente.url}",
+            f"- Descarga: {fila.get('url_descarga') or fuente.url}",
             f"- Fecha de descarga: {fecha:%d/%m/%Y %H:%M}",
-            f"- Archivo crudo: `{fila['raw_path']}`",
-            f"- SHA-256: `{fila['checksum'].removeprefix('sha256:')}`",
+            f"- Archivo crudo: `{fila['ruta_crudo']}`",
+            f"- SHA-256: `{fila['huella'].removeprefix('sha256:')}`",
         ]
         if fuente.nota:
             lineas += ["", fuente.nota]
@@ -270,10 +275,10 @@ def _registrar_si_es_nueva(dataset_id: str, url: str, ruta: Path) -> tuple[str, 
     """Registra la descarga salvo que sea idéntica a la última registrada."""
     actual = huella(ruta)
     registro = ultimo_registro(ruta)
-    if registro and registro["checksum"] == actual:
+    if registro and registro["huella"] == actual:
         log.info(
             "[%s] Idéntica a la descarga registrada el %s; no se agrega fila.",
-            dataset_id, registro["retrieved_at"],
+            dataset_id, registro["fecha_descarga"],
         )
         return actual, False
     registrar(dataset_id, url, ruta, actual)
@@ -409,12 +414,8 @@ def descargar_dataset(
 
 
 def fuentes_descargables() -> dict[str, FuenteInfo]:
-    """Fuentes aprobadas con URL y archivo en config/fuentes_health.yaml."""
-    return {
-        dataset_id: f
-        for dataset_id, f in cargar_configuracion().fuentes.items()
-        if f.estado == "approved" and f.url and f.nombre_archivo
-    }
+    """Fuentes aprobadas en el catálogo con enlace y archivo en config/fuentes_health.yaml."""
+    return {dataset_id: f for dataset_id, f in cargar_configuracion().fuentes.items() if f.descargable}
 
 
 def main(argv: list[str] | None = None) -> int:

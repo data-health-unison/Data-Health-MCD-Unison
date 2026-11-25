@@ -22,7 +22,6 @@ FUENTE = FuenteInfo(
     url="https://example.org/prueba.xlsx",
     nombre_archivo="prueba.xlsx",
     institucion="Ninguna",
-    formato="xlsx",
     descripcion="Archivo de prueba.",
 )
 
@@ -161,8 +160,7 @@ def test_fuentes_bien_definidas() -> None:
     assert len(set(archivos)) == len(archivos)
     for f in fuentes.values():
         assert f.url.startswith("https://")
-        assert f.formato in descarga.VALIDADORES
-        assert Path(f.nombre_archivo).suffix.lstrip(".") == f.formato
+        assert Path(f.nombre_archivo).suffix.lstrip(".") in descarga.VALIDADORES
         assert f.institucion and f.descripcion
 
 
@@ -172,12 +170,13 @@ def test_descarga_y_registra(raw: Path, monkeypatch: pytest.MonkeyPatch, tmp_pat
     res = descargar()
     assert res.registrada and not res.reutilizado
     (fila,) = descarga.leer_registro()
-    assert fila["dataset_id"] == "PRUEBA-001"
-    assert fila["raw_path"] == "data/raw/prueba.xlsx"
-    assert fila["checksum"] == huella(raw / "prueba.xlsx") == res.checksum
-    assert fila["status"] == "ok"
-    assert fila["download_url"] == FUENTE.url
-    assert fila["notes"] == ""
+    assert list(fila) == descarga.COLUMNAS_REGISTRO
+    assert fila["id_fuente"] == "PRUEBA-001"
+    assert fila["ruta_crudo"] == "data/raw/prueba.xlsx"
+    assert fila["huella"] == huella(raw / "prueba.xlsx") == res.checksum
+    assert fila["estado"] == "ok"
+    assert fila["url_descarga"] == FUENTE.url
+    assert fila["notas"] == ""
 
 
 def test_no_descarga_si_ya_existe(raw: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -262,9 +261,9 @@ def test_cli_descarga_una_fuente(raw: Path, monkeypatch: pytest.MonkeyPatch, tmp
 def test_registro_real_coincide_con_data_raw() -> None:
     """Las huellas de catalog/ingestions.csv son las de los crudos de data/raw (si existen)."""
     filas = descarga.leer_registro()
-    presentes = [f for f in filas if (PROJECT_ROOT / f["raw_path"]).exists()]
+    presentes = [f for f in filas if (PROJECT_ROOT / f["ruta_crudo"]).exists()]
     if not presentes:
         pytest.skip("No hay crudos descargados en data/raw.")
-    ultimas = {f["raw_path"]: f for f in presentes}
+    ultimas = {f["ruta_crudo"]: f for f in presentes}
     for ruta, fila in ultimas.items():
-        assert huella(PROJECT_ROOT / ruta) == fila["checksum"], ruta
+        assert huella(PROJECT_ROOT / ruta) == fila["huella"], ruta

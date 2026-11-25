@@ -24,10 +24,9 @@ from health_data.config import (
     PROCESSED_DATA_DIR,
     PROJECT_ROOT,
     RAW_DATA_DIR,
-    cargar_configuracion,
     ensure_directories,
 )
-from health_data.ingestion.descarga import descargar_dataset
+from health_data.ingestion.descarga import descargar_dataset, fuentes_descargables
 from health_data.processing import cartografia
 from health_data.validacion import ReporteValidacion, validar_archivo_procesado
 
@@ -56,30 +55,28 @@ def paso_cartografia(*, forzar: bool = False) -> None:
 
 
 def paso_descargas(*, forzar: bool = False) -> dict[str, object]:
-    """Descarga las fuentes aprobadas registradas en la configuración."""
+    """Descarga las fuentes aprobadas en catalog/datasets.csv."""
     log.info("=== Paso: Descarga de fuentes ===")
-    cfg = cargar_configuracion()
     resultados = {}
 
-    for dataset_id, fuente in cfg.fuentes.items():
-        if fuente.estado == "approved" and fuente.url and fuente.nombre_archivo:
-            try:
-                res = descargar_dataset(
-                    dataset_id=dataset_id,
-                    url=fuente.url,
-                    nombre_archivo=fuente.nombre_archivo,
-                    forzar=forzar,
-                )
-                resultados[dataset_id] = {
-                    "bytes": res.bytes_descargados,
-                    "reutilizado": res.reutilizado,
-                    "ruta": str(res.ruta),
-                    "checksum": res.checksum,
-                    "registrada": res.registrada,
-                }
-            except Exception as exc:
-                log.warning("[%s] No se pudo descargar: %s", dataset_id, exc)
-                resultados[dataset_id] = {"error": str(exc)}
+    for dataset_id, fuente in fuentes_descargables().items():
+        try:
+            res = descargar_dataset(
+                dataset_id=dataset_id,
+                url=fuente.url,
+                nombre_archivo=fuente.nombre_archivo,
+                forzar=forzar,
+            )
+            resultados[dataset_id] = {
+                "bytes": res.bytes_descargados,
+                "reutilizado": res.reutilizado,
+                "ruta": str(res.ruta),
+                "checksum": res.checksum,
+                "registrada": res.registrada,
+            }
+        except Exception as exc:
+            log.warning("[%s] No se pudo descargar: %s", dataset_id, exc)
+            resultados[dataset_id] = {"error": str(exc)}
 
     return resultados
 
