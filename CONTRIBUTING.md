@@ -53,8 +53,11 @@ Todo cambio entra a `main` por pull request; nadie sube commits directo a `main`
    establecimiento`.
 3. La descripción dice qué cambia, por qué y cómo se probó. Si el cambio mueve resultados (cifras del README,
    tabla final, figuras), se anotan las cifras antes y después.
-4. Lo revisa al menos un integrante que no sea el autor. El autor no aprueba su propio PR.
-5. Se fusiona con *Create a merge commit*, para conservar la historia de la rama.
+4. El PR agrega su línea en la sección **Sin publicar** de [CHANGELOG.md](CHANGELOG.md), en el apartado que le
+   toca (*Agregado*, *Cambiado*, *Corregido* o *Eliminado*). Los cambios que no se notan fuera del código
+   (lint, pruebas internas) no necesitan línea.
+5. Lo revisa al menos un integrante que no sea el autor. El autor no aprueba su propio PR.
+6. Se fusiona con *Create a merge commit*, para conservar la historia de la rama.
 
 ## Actualizar una rama con `main`
 
@@ -86,3 +89,45 @@ Quien fusiona el PR borra la rama a mano:
 
 `git branch -d` se niega a borrar una rama que no esté fusionada, así que no se pierde trabajo por accidente.
 Los demás integrantes borran su copia local con los mismos dos últimos comandos.
+
+## Versiones
+
+El proyecto usa [versionado semántico](https://semver.org/lang/es/) (`MAYOR.MENOR.PARCHE`), adaptado a un proyecto
+de datos: el número que sube depende de si las cifras siguen siendo comparables con las de la versión anterior.
+
+| Sube | Cuándo | Ejemplo |
+|---|---|---|
+| MAYOR (`1.0.0` → `2.0.0`) | Cambia la metodología y las cifras dejan de ser comparables | Otro umbral de tiempo, otra definición de establecimiento operativo, columnas de la tabla final que se quitan o renombran |
+| MENOR (`0.2.0` → `0.3.0`) | Se agrega algo y lo anterior sigue siendo comparable | Una fuente nueva, un indicador nuevo, una vista nueva del tablero |
+| PARCHE (`0.2.0` → `0.2.1`) | Corrección que no cambia la metodología | Un error en el código, la coordenada de un establecimiento, documentación |
+
+Mientras la versión empiece con `0.`, la metodología sigue en construcción. La `1.0.0` es la entrega final del
+proyecto.
+
+La versión vive solo en `src/health_data/__init__.py` (`__version__`); `pyproject.toml` y el tablero la leen de
+ahí.
+
+### Cuándo se publica una versión
+
+En cada hito (entregas del curso, presentaciones) y siempre que cambien las cifras publicadas. No en cada PR.
+
+### Cómo se publica
+
+1. En una rama `chore/version-X.Y.Z`:
+   - En `CHANGELOG.md`, lo que está en **Sin publicar** pasa a una sección `## [X.Y.Z] - AAAA-MM-DD`, y se
+     actualizan los enlaces del final.
+   - Si las cifras cambiaron, la sección lleva las nuevas.
+   - `__version__` sube a `X.Y.Z` en `src/health_data/__init__.py`.
+2. Se abre el PR, se revisa y se fusiona como cualquier otro.
+3. En `main` ya actualizado se crea el tag y se sube:
+
+   ```bash
+   git switch main
+   git pull --ff-only
+   git tag -a vX.Y.Z -m "vX.Y.Z: resumen en una línea"
+   git push origin vX.Y.Z
+   ```
+
+4. Opcional: en GitHub, *Releases* → *Draft a new release* con ese tag y el texto de su sección del CHANGELOG.
+
+Un tag no se mueve ni se borra una vez publicado. Si la versión salió con un error, se corrige en la siguiente.

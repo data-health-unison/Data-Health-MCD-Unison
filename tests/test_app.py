@@ -109,6 +109,14 @@ def test_cita_de_fuentes_con_fechas_de_consulta(tablero) -> None:
     assert "del 2026-10-16 al 2026-10-17" in pie
 
 
+def test_version_en_la_barra_lateral(tablero) -> None:
+    from health_data import __version__
+
+    tablero(_tabla())
+    at = _ejecutar("🗺️ Panorama")
+    assert f"Versión {__version__}" in [c.value for c in at.sidebar.caption]
+
+
 def test_tabla_sin_variables_de_vulnerabilidad(tablero) -> None:
     """Tablas generadas antes de agregar ITER a la tabla final siguen funcionando."""
     tablero(_tabla(con_vulnerabilidad=False))

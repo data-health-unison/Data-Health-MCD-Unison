@@ -4,15 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "health-data"
-version = "0.1.0"
-description = "Data engineering project for analyzing access to healthcare services."
+description = "Accesibilidad geográfica a servicios de salud de primer y segundo nivel en Sonora."
 readme = "README.md"
 requires-python = ">=3.11"
+# La versión sale de src/health_data/__init__.py y las dependencias de requirements.txt,
+# para que cada dato viva en un solo lugar.
+dynamic = ["version", "dependencies"]
 
-dependencies = [
-    "pandas",
-    "requests",
-]
+[tool.setuptools.dynamic]
+version = { attr = "health_data.__version__" }
+dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools.packages.find]
 where = ["src"]
