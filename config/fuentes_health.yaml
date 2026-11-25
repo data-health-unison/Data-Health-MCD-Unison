@@ -23,64 +23,39 @@ localidades_excluidas:
     localidad: "Tecomate (Isla del Tiburón)"
     motivo: "Isla del Tiburón: sin acceso por carretera y 1–12 habitantes; probablemente campamentos de pesca, no localidades permanentes (decisión del equipo, 18/10/2026)"
 
-# Fuentes de datos del proyecto
+# Cómo se descarga cada fuente. Qué es la fuente, su estado (propuesta, aprobada...) y su responsable
+# están en catalog/datasets.csv; aquí solo va lo necesario para descargarla, con la descripción y la nota
+# del archivo descargado (references/fuentes_descargadas.md). Toda fuente de aquí debe estar en el catálogo,
+# y solo se descargan las que allí están aprobadas.
 fuentes:
   CONEVAL-ACC-001:
-    dataset_id: "CONEVAL-ACC-001"
-    nombre: "Grado de accesibilidad a carretera pavimentada 2020 (GACP)"
     url: "https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Shapefile_localidades_componentes_GACP_CONEVAL.zip"
     nombre_archivo: "coneval_gacp2020_localidades.zip"
-    estado: "approved"
-    prioridad: "alta"
-    institucion: "CONEVAL, coneval.org.mx"
-    formato: "zip"
     descripcion: "Grado de accesibilidad a carretera pavimentada de cada localidad del país, con sus tres componentes: distancia a carretera pavimentada, tiempo al centro de servicios más cercano y transporte público a la cabecera municipal. Población del Censo 2020."
     nota: "Publicado el 15/06/2021. Licencia CC BY-NC 2.5 MX: uso no comercial y citando la fuente. CONEVAL desapareció en 2025; si el enlace deja de funcionar, buscar la copia que resguarda el INEGI. Metodología: https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Documento_metodologico_GACP_2020.pdf"
 
   INEGI-POP-001:
-    dataset_id: "INEGI-POP-001"
-    nombre: "Principales resultados por localidad (ITER) - Censo 2020 Sonora"
     url: "https://www.inegi.org.mx/contenidos/programas/ccpv/iter/zip/iter2020/iter_26csv20.zip"
     nombre_archivo: "iter_26csv20.zip"
-    estado: "approved"
-    prioridad: "alta"
-    institucion: "INEGI, inegi.org.mx"
-    formato: "zip"
     descripcion: "Principales resultados por localidad del Censo de Población y Vivienda 2020 para Sonora. Un CSV con una fila por localidad, más los totales del estado y de cada municipio y los acumulados de las localidades de una y dos viviendas."
     nota: "Las columnas se describen en https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf."
 
   SALUD-001:
-    dataset_id: "SALUD-001"
-    nombre: "Establecimientos de salud (CLUES)"
     url: "https://gobi.salud.gob.mx/gobi/catalogos/catalogosmaestros/ESTABLECIMIENTO_SALUD_202608.xlsx"
     nombre_archivo: "ESTABLECIMIENTO_SALUD_202608.xlsx"
-    estado: "approved"
-    prioridad: "alta"
-    institucion: "Secretaría de Salud, gobi.salud.gob.mx"
-    formato: "xlsx"
     descripcion: "Catálogo nacional de establecimientos de salud. Una fila por CLUES con institución, tipología, nivel de atención, estatus de operación, domicilio, claves geográficas y coordenadas."
     nota: "El nombre del archivo dice 202608, pero trae movimientos hasta el 22/09/2026."
 
   INEGI-GEO-001:
-    dataset_id: "INEGI-GEO-001"
-    nombre: "Marco Geoestadístico 2025"
     url: "https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/marcogeo/794551163061/26_sonora.zip"
     nombre_archivo: "mg2025_26_sonora.zip"
-    estado: "approved"
-    prioridad: "media"
-    institucion: "INEGI, inegi.org.mx"
-    formato: "zip"
     descripcion: "Cartografía de Sonora en shapefile: límites del estado y de los municipios, AGEB, localidades amanzanadas (polígonos) y rurales (puntos), manzanas, vialidades y servicios."
     nota: "Producto 794551163061, con fecha de referencia 31/07/2025 según sus metadatos. Las coordenadas están en metros (EPSG:6372)."
 
   INEGI-ROUTE-001:
-    dataset_id: "INEGI-ROUTE-001"
-    nombre: "SAKBÉ - API de Ruteo Red Carretera INEGI"
-    api_base: "https://gaia.inegi.org.mx/sakbe_v3.1/"  #https://www.inegi.org.mx/servicios/Ruteo/
+    api_base: "https://gaia.inegi.org.mx/sakbe_v3.1/"
     token_env: "SAKBE_TOKEN"
     # INEGI no documenta un límite. El catálogo estimaba ~2,500 por token, pero el 18/10/2026 un token aceptó
     # 11,414 consultas en un día sin rechazo. Se usa 10,000: por debajo de lo comprobado. Si SAKBÉ rechaza un
     # token antes, el cliente lo detecta, lo registra en limites_detectados y pasa al siguiente.
     limite_diario: 10000
-    estado: "approved"
-    prioridad: "alta"

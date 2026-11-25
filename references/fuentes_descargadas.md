@@ -2,23 +2,13 @@
 
 Archivo generado por `health_data.ingestion.descarga` a partir de `catalog/ingestions.csv`. No editar a mano.
 
-## SALUD-001: Establecimientos de salud (CLUES)
-
-Catálogo nacional de establecimientos de salud. Una fila por CLUES con institución, tipología, nivel de atención, estatus de operación, domicilio, claves geográficas y coordenadas.
-
-- Fuente: Secretaría de Salud, gobi.salud.gob.mx
-- Descarga: https://gobi.salud.gob.mx/gobi/catalogos/catalogosmaestros/ESTABLECIMIENTO_SALUD_202608.xlsx
-- Fecha de descarga: 11/10/2026 09:47
-- Archivo crudo: `data/raw/ESTABLECIMIENTO_SALUD_202608.xlsx`
-- SHA-256: `5a1cfbe7062b41d9e51249aa4b5fc8a1e623e935882e97fb5f0aac797165c95b`
-
-El nombre del archivo dice 202608, pero trae movimientos hasta el 22/09/2026.
-
-## INEGI-POP-001: Principales resultados por localidad (ITER)
+## INEGI-POP-001: Principales resultados por localidad (ITER) - Censo 2020
 
 Principales resultados por localidad del Censo de Población y Vivienda 2020 para Sonora. Un CSV con una fila por localidad, más los totales del estado y de cada municipio y los acumulados de las localidades de una y dos viviendas.
 
-- Fuente: INEGI, inegi.org.mx
+- Fuente: INEGI
+- Página de la fuente: https://www.inegi.org.mx/app/scitel/Default?ev=9
+- Edición: 2020
 - Descarga: https://www.inegi.org.mx/contenidos/programas/ccpv/iter/zip/iter2020/iter_26csv20.zip
 - Fecha de descarga: 12/10/2026 13:12
 - Archivo crudo: `data/raw/iter_26csv20.zip`
@@ -26,11 +16,27 @@ Principales resultados por localidad del Censo de Población y Vivienda 2020 par
 
 Las columnas se describen en https://www.inegi.org.mx/app/scitel/doc/descriptor/fd_iter_cpv2020.pdf.
 
-## INEGI-GEO-001: Marco Geoestadístico 2025
+## SALUD-001: Establecimientos de salud (CLUES)
+
+Catálogo nacional de establecimientos de salud. Una fila por CLUES con institución, tipología, nivel de atención, estatus de operación, domicilio, claves geográficas y coordenadas.
+
+- Fuente: Secretaría de Salud
+- Página de la fuente: https://gobi.salud.gob.mx/
+- Edición: 2026-08
+- Descarga: https://gobi.salud.gob.mx/gobi/catalogos/catalogosmaestros/ESTABLECIMIENTO_SALUD_202608.xlsx
+- Fecha de descarga: 11/10/2026 09:47
+- Archivo crudo: `data/raw/ESTABLECIMIENTO_SALUD_202608.xlsx`
+- SHA-256: `5a1cfbe7062b41d9e51249aa4b5fc8a1e623e935882e97fb5f0aac797165c95b`
+
+El nombre del archivo dice 202608, pero trae movimientos hasta el 22/09/2026.
+
+## INEGI-GEO-001: Marco Geoestadístico
 
 Cartografía de Sonora en shapefile: límites del estado y de los municipios, AGEB, localidades amanzanadas (polígonos) y rurales (puntos), manzanas, vialidades y servicios.
 
-- Fuente: INEGI, inegi.org.mx
+- Fuente: INEGI
+- Página de la fuente: https://www.inegi.org.mx/app/biblioteca/ficha.html?upc=794551163061
+- Edición: 2025-07
 - Descarga: https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/marcogeo/794551163061/26_sonora.zip
 - Fecha de descarga: 13/10/2026 12:36
 - Archivo crudo: `data/raw/mg2025_26_sonora.zip`
@@ -38,11 +44,13 @@ Cartografía de Sonora en shapefile: límites del estado y de los municipios, AG
 
 Producto 794551163061, con fecha de referencia 31/07/2025 según sus metadatos. Las coordenadas están en metros (EPSG:6372).
 
-## CONEVAL-ACC-001: Grado de accesibilidad a carretera pavimentada 2020 (GACP)
+## CONEVAL-ACC-001: Grado de accesibilidad a carretera pavimentada (GACP) por localidad
 
 Grado de accesibilidad a carretera pavimentada de cada localidad del país, con sus tres componentes: distancia a carretera pavimentada, tiempo al centro de servicios más cercano y transporte público a la cabecera municipal. Población del Censo 2020.
 
-- Fuente: CONEVAL, coneval.org.mx
+- Fuente: CONEVAL
+- Página de la fuente: https://www.coneval.org.mx/Medicion/Paginas/Grado_accesibilidad_carretera.aspx
+- Edición: 2020
 - Descarga: https://www.coneval.org.mx/Medicion/MP/Documents/Accesibilidad_carretera/2020/Shapefile_localidades_componentes_GACP_CONEVAL.zip
 - Fecha de descarga: 16/10/2026 09:30
 - Archivo crudo: `data/raw/coneval_gacp2020_localidades.zip`

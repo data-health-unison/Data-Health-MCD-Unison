@@ -5,6 +5,7 @@ Rutas, fuentes y umbrales metodológicos de accesibilidad a servicios de salud.
 
 from __future__ import annotations
 
+import csv
 import functools
 import os
 from dataclasses import dataclass, field
@@ -32,8 +33,16 @@ DIR_PROCESSED = PROCESSED_DATA_DIR
 DIR_GEO = PROCESSED_DATA_DIR / "geografia"
 
 ARCHIVO_FUENTES = DIR_CONFIG / "fuentes_health.yaml"
+ARCHIVO_CATALOGO = PROJECT_ROOT / "catalog" / "datasets.csv"
 ARCHIVO_MANIFIESTO = PROCESSED_DATA_DIR / "manifiesto.json"
 ARCHIVO_TABLA_FINAL = PROCESSED_DATA_DIR / "accesibilidad_localidades.parquet"
+
+# Estados de una fuente en catalog/datasets.csv; solo se descargan las aprobadas
+ESTADO_PROPUESTA = "propuesta"
+ESTADO_APROBADA = "aprobada"
+ESTADO_DIFERIDA = "diferida"
+ESTADO_RECHAZADA = "rechazada"
+ESTADOS_FUENTE = (ESTADO_PROPUESTA, ESTADO_APROBADA, ESTADO_DIFERIDA, ESTADO_RECHAZADA)
 
 # Claves geográficas de la entidad de interés
 CLAVE_SONORA = "26"
@@ -59,22 +68,31 @@ class Umbrales:
 
 @dataclass(frozen=True)
 class FuenteInfo:
-    """Metadatos de una fuente de datos."""
+    """Una fuente del catálogo y, si se descarga, cómo se descarga."""
 
     dataset_id: str
     nombre: str
+    # De catalog/datasets.csv: qué es la fuente y en qué estado está
+    estado: str = ESTADO_PROPUESTA
+    prioridad: str = ""
+    institucion: str = ""
+    url_fuente: str = ""
+    version: str = ""
+    responsable: str = ""
+    # De config/fuentes_health.yaml: cómo se descarga
     url: str = ""
     api_base: str = ""
     token_env: str = ""
     nombre_archivo: str = ""
-    estado: str = "approved"
-    prioridad: str = "alta"
     limite_diario: int | None = None
-    # Para describir la descarga en references/fuentes_descargadas.md
-    institucion: str = ""
-    formato: str = ""
+    # Describen el archivo descargado en references/fuentes_descargadas.md
     descripcion: str = ""
     nota: str = ""
+
+    @property
+    def descargable(self) -> bool:
+        """Aprobada en el catálogo y con enlace y archivo de descarga."""
+        return self.estado == ESTADO_APROBADA and bool(self.url and self.nombre_archivo)
 
 
 @dataclass(frozen=True)
@@ -91,7 +109,7 @@ class Configuracion:
         if dataset_id not in self.fuentes:
             disponibles = ", ".join(sorted(self.fuentes))
             raise KeyError(
-                f"La fuente '{dataset_id}' no está en config/fuentes_health.yaml. "
+                f"La fuente '{dataset_id}' no está en catalog/datasets.csv. "
                 f"Fuentes disponibles: {disponibles}"
             )
         return self.fuentes[dataset_id]
@@ -125,16 +143,41 @@ def ensure_directories() -> None:
 asegurar_directorios = ensure_directories
 
 
-@functools.lru_cache(maxsize=1)
-def cargar_configuracion(ruta: Path | None = None) -> Configuracion:
-    """Carga y valida la configuración del proyecto (cacheada)."""
-    archivo = ruta or ARCHIVO_FUENTES
+def leer_catalogo(ruta: Path | None = None) -> dict[str, dict[str, str]]:
+    """Filas de catalog/datasets.csv por id_fuente; falla si hay ids repetidos o estados desconocidos."""
+    archivo = ruta or ARCHIVO_CATALOGO
     if not archivo.exists():
-        # Configuración por omisión si el archivo aún no existe
-        return Configuracion(fuentes={}, umbrales=Umbrales())
+        return {}
+    # utf-8-sig: el catálogo se guarda con BOM para que Excel respete los acentos
+    with archivo.open(encoding="utf-8-sig", newline="") as fh:
+        filas = list(csv.DictReader(fh))
 
-    with archivo.open(encoding="utf-8") as fh:
-        datos: dict[str, Any] = yaml.safe_load(fh) or {}
+    catalogo: dict[str, dict[str, str]] = {}
+    for fila in filas:
+        id_fuente = fila["id_fuente"].strip()
+        if id_fuente in catalogo:
+            raise ValueError(f"La fuente {id_fuente} está repetida en {archivo.name}.")
+        if fila["estado"] not in ESTADOS_FUENTE:
+            raise ValueError(
+                f"La fuente {id_fuente} tiene el estado '{fila['estado']}' en {archivo.name}; "
+                f"los válidos son {', '.join(ESTADOS_FUENTE)}."
+            )
+        catalogo[id_fuente] = fila
+    return catalogo
+
+
+@functools.lru_cache(maxsize=4)
+def cargar_configuracion(ruta: Path | None = None, ruta_catalogo: Path | None = None) -> Configuracion:
+    """Carga y valida la configuración del proyecto (cacheada).
+
+    Las fuentes salen del catálogo (catalog/datasets.csv), completadas con sus datos de descarga
+    de config/fuentes_health.yaml. Falla si el YAML trae una fuente que no está en el catálogo.
+    """
+    archivo = ruta or ARCHIVO_FUENTES
+    datos: dict[str, Any] = {}
+    if archivo.exists():
+        with archivo.open(encoding="utf-8") as fh:
+            datos = yaml.safe_load(fh) or {}
 
     umbrales_brutos = datos.get("umbrales") or {}
     umbrales = Umbrales(
@@ -145,20 +188,32 @@ def cargar_configuracion(ruta: Path | None = None) -> Configuracion:
         }
     )
 
+    catalogo = leer_catalogo(ruta_catalogo)
+    descargas = {str(k): v or {} for k, v in (datos.get("fuentes") or {}).items()}
+    sin_catalogo = sorted(set(descargas) - set(catalogo))
+    if sin_catalogo:
+        raise ValueError(
+            f"Fuentes en {archivo.name} que no están en catalog/datasets.csv: {', '.join(sin_catalogo)}. "
+            "Agréguelas primero al catálogo."
+        )
+
     fuentes: dict[str, FuenteInfo] = {}
-    for dataset_id, f in (datos.get("fuentes") or {}).items():
-        fuentes[str(dataset_id)] = FuenteInfo(
-            dataset_id=str(f.get("dataset_id", dataset_id)),
-            nombre=str(f.get("nombre", dataset_id)),
+    for dataset_id, fila in catalogo.items():
+        f = descargas.get(dataset_id, {})
+        fuentes[dataset_id] = FuenteInfo(
+            dataset_id=dataset_id,
+            nombre=fila["nombre"],
+            estado=fila["estado"],
+            prioridad=fila["prioridad"],
+            institucion=fila["institucion"],
+            url_fuente=fila["url_fuente"],
+            version=fila["version"],
+            responsable=fila["responsable"],
             url=str(f.get("url", "")),
             api_base=str(f.get("api_base", "")),
             token_env=str(f.get("token_env", "")),
             nombre_archivo=str(f.get("nombre_archivo", "")),
-            estado=str(f.get("estado", "approved")),
-            prioridad=str(f.get("prioridad", "alta")),
             limite_diario=f.get("limite_diario"),
-            institucion=str(f.get("institucion", "")),
-            formato=str(f.get("formato", "")),
             descripcion=str(f.get("descripcion", "")),
             nota=str(f.get("nota", "")),
         )
